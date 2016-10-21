@@ -217,7 +217,7 @@ for i in range(FLAGS.iter_max):
 
 	# Localize target with monte carlo sampling.
 	tracker.draw_particles(gt_last)
-	pre_loc = tracker.predict_location(pre_M, gt_last, resize_factor, t, 224)
+	pre_loc = tracker.predict_location(pre_M_g, gt_last, resize_factor, t, 224)
 	print('At time {0}, the most confident value is {1}'.format(t, tracker.cur_best_conf))
 
 	# Performs distracter detecion.
