@@ -101,9 +101,28 @@ vgg.print_prob(roi_t0, sess)
 # 2. Train G and S networks.
 assert t == 0
 
+## Train selCNN networks with first frame roi
+# reshape gt_M for compatabilities
+# Gen anotated mask for target arear
+
+lselCNN = SelCNN('sel_local', vgg.conv4_3, (1,28,28,1))
+sgt_M = inputProducer.gen_mask(lselCNN.pre_M_size)
+sgt_M = sgt_M[np.newaxis,:,:,np.newaxis]
+feed_dict = {vgg.imgs: [roi_t0], lselCNN.gt_M: sgt_M}
+train_selCNN(sess, lselCNN, feed_dict)
+
+
+gselCNN = SelCNN('sel_global', vgg.conv5_3, (1,14,14,1))
+ggt_M = inputProducer.gen_mask(gselCNN.pre_M_size)
+ggt_M = ggt_M[np.newaxis,:,:,np.newaxis]
+feed_dict[gselCNN.gt_M] = ggt_M # corrpus the other nets?
+train_selCNN(sess, gselCNN, feed_dict)
+
+
 lselCNN = SelCNN('sel_local', vgg.conv4_3, (1,28,28,1))
 gselCNN = SelCNN('sel_global', vgg.conv5_3, (1,14,14,1))
 
+"""
 # Gen anotated mask for target arear
 sgt_M = inputProducer.gen_mask(lselCNN.pre_M_size)
 ggt_M = inputProducer.gen_mask(gselCNN.pre_M_size)
@@ -113,15 +132,13 @@ ggt_M = inputProducer.gen_mask(gselCNN.pre_M_size)
 sgt_M = sgt_M[np.newaxis,:,:,np.newaxis]
 ggt_M = ggt_M[np.newaxis,:,:,np.newaxis]
 
-
-
-
 feed_dict = {vgg.imgs: [roi_t0], 
 			lselCNN.gt_M: sgt_M,
 			gselCNN.gt_M: ggt_M} # corrpus the other nets?
 
 train_selCNN(sess, lselCNN, feed_dict)
 train_selCNN(sess, gselCNN, feed_dict)
+"""
 
 # Perform saliency maps selection 
 s_sel_maps, s_idx = lselCNN.sel_feature_maps(sess, vgg.conv4_3, feed_dict,FLAGS.num_sel)
@@ -132,7 +149,7 @@ assert isinstance(g_sel_maps, np.ndarray)
 assert len(s_sel_maps.shape) == 4
 
 # Instantiate G and S networks.
-gnet = GNet('GNet', s_sel_maps.shape)
+gnet = GNet('GNet', g_sel_maps.shape)
 snet = SNet('SNet', s_sel_maps.shape)
 
 ## Train G and S nets by minimizing a composite loss.
@@ -146,8 +163,8 @@ s_sel_maps_t0 = s_sel_maps
 ## perform SNget adaptive update every 20 frames, perform SNet discrimtive 
 ## update if distracter detection return True.
 
-# Instantiate Tracker object and initialize it with sgt_M.
-tracker = TrackerVanilla(sgt_M, gt)
+# Instantiate Tracker object 
+tracker = TrackerVanilla(gt)
 
 # Iter imgs
 gt_last = gt 
@@ -162,12 +179,12 @@ for i in range(FLAGS.iter_max):
 	# Get heat map predicted by GNet
 	feed_dict_vgg = {vgg.imgs : [roi]}
 	s_maps, g_maps = sess.run([vgg.conv4_3, vgg.conv5_3], feed_dict=feed_dict_vgg)
-	s_sel_maps = s_maps[s_idx] # np.ndarray, shape = [1,28,28,num_sel]?
-	g_sel_maps = g_maps[g_idx]
+	s_sel_maps = s_maps[...,s_idx] # np.ndarray, shape = [1,28,28,num_sel]?
+	g_sel_maps = g_maps[...,g_idx]
 
 	feed_dict_g = { gnet.input_maps: g_sel_maps}
 	pre_M = sess.run(gnet.pre_M, feed_dict=feed_dict_g)
-	tracker.pre_M_q.push(pre_M)
+	tracker.pre_M_q.put(pre_M)
 
 	if i % 20 == 0:
 		# Retrive the most confident result within the intervening frames
@@ -177,8 +194,9 @@ for i in range(FLAGS.iter_max):
 		snet.adaptive_finetune(sess, best_M)
 
 	# Localize target with monte carlo sampling.
-	tracker.draw_particles()
+	tracker.draw_particles(gt_last)
 	pre_loc = tracker.predict_location(pre_M, gt_last, resize_factor, t)
+	print('At time {0}, the most confident value is {1}'.format(t, tracker.cur_best_conf))
 
 	# Performs distracter detecion.
 	if tracker.distracted():

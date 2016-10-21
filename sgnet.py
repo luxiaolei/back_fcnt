@@ -86,18 +86,18 @@ class SGNet:
 
 		# Assertion
 		assert isinstance(gt_M, np.ndarray)
-		if len(gt_M) == 2:
+		if len(gt_M.shape) == 2:
 			# gt_M is a 2D mask
 			gt_M = tf.constant(gt_M.reshape((1,gt_M.shape[0], gt_M.shape[1], 1)), dtype=tf.float32)
-		elif len(gt_M) == 4:
+		elif len(gt_M.shape) == 4:
 			# gt_M is SGNet.pre_M
 			gt_M = tf.constant(gt_M, dtype=tf.float32)
 		else:
-			print('Unhandled input shape: %s'%gt_M.shape)
+			print('Unhandled input shape: {0}'.format(gt_M.shape))
 
 		with tf.name_scope(self.scope) as scope:
 			beta = tf.constant(self.params['wd'], name='beta')
-			loss_rms = tf.reduce_mean(tf.square(tf.sub(gt_M, self.pre_M))) 
+			loss_rms = tf.reduce_mean(tf.squared_difference(gt_M, self.pre_M))
 			loss_wd = [tf.reduce_mean(tf.square(w)) for w in self.kernel_weights]
 			loss_wd = beta * tf.add_n(loss_wd)
 			total_loss = loss_rms + loss_wd
@@ -124,10 +124,10 @@ class GNet(SGNet):
 
 
 
-class SNet:
+class SNet(SGNet):
 	lr = 1e-8
 	optimizer = tf.train.GradientDescentOptimizer(lr)
-	def __init__(self, SGNet, scope, vgg_conv_shape):
+	def __init__(self, scope, vgg_conv_shape):
 		"""
 		Initialized in the first frame
 		"""

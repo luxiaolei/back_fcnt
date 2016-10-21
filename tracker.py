@@ -27,9 +27,7 @@ class Tracker:
 	See 3.3.1 Dynamic model in http://www.cs.toronto.edu/~dross/ivt/RossLimLinYang_ijcv.pdf for reference
 
 	Particle filter calss"""
-	def __init__(self, init_gt_M, init_location,):
-		
-		self.init_gt_M = init_gt_M
+	def __init__(self, init_location,):
 		self.conf_q = Queue(maxsize=20)
 		self.pre_M_q = Queue(maxsize=20)
 		self.last_two_loc_q = Queue(maxsize=2)
@@ -131,18 +129,18 @@ class Tracker:
 			return False
 			
 	@classmethod
-	def compute_conf(roi, loc_p):
+	def compute_conf(self, roi, loc_p):
 		"""Helper func for computing confidence"""
-		cx,cy,w,h = loc_p
+		x,y,w,h = loc_p
 		conf = np.sum(roi[y-int(0.5*h): y+int(0.5*h), \
 					x-int(0.5*w):x+int(0.5*w)])
 		return conf
 
 	@classmethod
-	def affgeo2loc(las_loc, aff_param):
+	def aff2loc(self, las_loc, aff_param):
 		"""Convert affine params to location."""
 		assert len(aff_param)==4, 'This method only works for dof 4 aff space.'
-		cur_loc = map(add, las_loc, aff_param)
+		cur_loc = [i+j for i,j in zip(las_loc, aff_param)]
 		return cur_loc
 
 
@@ -199,7 +197,7 @@ class TrackerVanilla(Tracker):
 		self.aff_params_M = rand_norml_M * aff_sig_M
 
 
-	def predict_location(self, pre_M, gt_last, resize_factor, t):
+	def predict_location(self, pre_M, gt_last, resize_factor, t, roi_size):
 		"""
 		Predict location for each particle. It is calculated by
 		1. compute the confidence of the i-th candidate, which is 
@@ -224,7 +222,7 @@ class TrackerVanilla(Tracker):
 		loc_M = loc_M.astype(np.int)
 
 		# Upsampling pre_M bicubicly to roi_size
-		pre_M_resized = imresize(pre_M, [roi_size, roi_size], interp='bicubic')
+		pre_M_resized = imresize(pre_M[0,:,:,0], [roi_size, roi_size], interp='bicubic')
 
 		# Compute conf for each particle 
 		conf_lsit = []
@@ -235,11 +233,12 @@ class TrackerVanilla(Tracker):
 		# Get index and conf score of of the most confident one
 		idx = np.argmax(conf_lsit)
 		self.cur_best_conf = conf_lsit[idx]
-		self.conf_q.push(conf_lsit[idx])
+		self.conf_q.put(conf_lsit[idx])
 
 		# Get the corresponding aff_param which is then
 		# used to predicted the cureent best location
 		best_aff =  self.aff_params_M[idx]
+		print('The affine paramters: [dx,dy,dw,dh] is {0}'.format(best_aff))
 		self.pre_location = self.aff2loc(gt_last, best_aff)
 
 		# Stack into records queue

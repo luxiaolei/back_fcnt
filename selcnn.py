@@ -75,7 +75,7 @@ class SelCNN:
 		
 		#with tf.variable_scope(self.scope) as scope:
 		# Root mean square loss
-		rms_loss = tf.sqrt(tf.reduce_mean(tf.square(tf.sub(self.gt_M, self.pre_M))))
+		rms_loss = tf.reduce_mean(tf.squared_difference(self.gt_M, self.pre_M))
 		# tf.squared_difference(x, y, name=None) try this! 
 		# (x-y)(x-y) 
 
@@ -140,9 +140,9 @@ class SelCNN:
 
 		vgg_maps, signif_v = sess.run([vgg_conv, S_tensor], feed_dict=feed_dict)
 
-		# Retrieve the top-nul_sel feature maps and corresponding idx
+		# Retrieve the top-num_sel feature maps and corresponding idx
 		idxs = sorted(range(len(signif_v)), key=lambda i: signif_v[i])[-num_sel:]
 		best_maps = vgg_maps[...,idxs]
-		print('Selected maps shape:'%best_maps.shape)
+		print('Selected maps shape:%s'%best_maps.shape)
 		return best_maps, idxs
 		
