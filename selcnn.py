@@ -29,9 +29,9 @@ class SelCNN:
 		'dropout_rate': 0.3,
 		'k_size': [3, 3, 512, 1],
 		'wd': 0.5,
-		'lr_initial': 1e-9, # 1e-8 gives 438 after 200 steps, 1e-7 gives better maps?
-		'lr_decay_steps': 0,
-		'lr_decay_rate':  1
+		'lr_initial': 1e-8, # 1e-8 gives 438 after 200 steps, 1e-7 gives better maps?
+		'lr_decay_steps': 100,
+		'lr_decay_rate':  0.5
 		}
 		with tf.name_scope(scope) as scope:
 			self.pre_M = self._get_pre_M()

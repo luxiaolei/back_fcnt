@@ -167,7 +167,7 @@ snet = SNet('SNet', s_sel_maps.shape)
 ## Train G and S nets by minimizing a composite loss.
 ## with feeding selected saliency maps for each networks.
 print('Trainning SGNets with passing selected feature maps.')
-t = time
+t = time.time()
 feed_dict = {gnet.input_maps: g_sel_maps, snet.input_maps: s_sel_maps}
 train_sgNet(sess, gnet, snet, sgt_M, ggt_M, feed_dict)
 s_sel_maps_t0 = s_sel_maps
