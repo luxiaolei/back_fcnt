@@ -184,6 +184,7 @@ tracker = TrackerVanilla(gt)
 gt_last = gt 
 print("Total time cost for initialization : %.2f s"%(time.time() - t_start))
 for i in range(FLAGS.iter_max):
+	i += 1
 	t_inter = time.time()
 	print('Step: ', i)
 	# Gnerates next frame infos

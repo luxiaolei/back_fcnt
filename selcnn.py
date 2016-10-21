@@ -53,7 +53,7 @@ class SelCNN:
 		pre_M = tf.nn.bias_add(conv, bias)
 		self.variables += [kernel, bias]
 		# Subtract mean 
-		#pre_M -= tf.reduce_mean(pre_M)
+		pre_M -= tf.reduce_mean(pre_M)
 		#pre_M# /= tf.reduce_max(pre_M)
 		return pre_M
 
@@ -76,14 +76,10 @@ class SelCNN:
 		gt_shape = self.gt_M.get_shape().as_list()[1:]
 		assert gt_shape == pre_shape, 'Shapes are not compatiable! gt_M : {0}, pre_M : {1}'.format(gt_shape, pre_shape)
 		
-		#with tf.variable_scope(self.scope) as scope:
 		# Root mean square loss
 		rms_loss = tf.reduce_mean(tf.squared_difference(self.gt_M, self.pre_M))
-		# tf.squared_difference(x, y, name=None) try this! 
-		# (x-y)(x-y) 
-
+		
 		tf.add_to_collection('losses', rms_loss)
-
 		# Use vanila SGD with exponentially decayed learning rate
 		# Decayed_learning_rate = learning_rate *
 		#                decay_rate ^ (global_step / decay_steps)
