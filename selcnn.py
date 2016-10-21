@@ -143,6 +143,6 @@ class SelCNN:
 		# Retrieve the top-num_sel feature maps and corresponding idx
 		idxs = sorted(range(len(signif_v)), key=lambda i: signif_v[i])[-num_sel:]
 		best_maps = vgg_maps[...,idxs]
-		print('Selected maps shape:%s'%best_maps.shape)
+		print('Selected maps shape: {0}'.format(best_maps.shape)) # e.g.(1, 28, 28, 384)
 		return best_maps, idxs
 		

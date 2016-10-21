@@ -123,7 +123,11 @@ class Tracker:
 
 		# Compute confidence according to 
 		# S = with_in / with_out
-		if self.cur_best_conf <= self.params['min_conf']:
+		conf_within = self.compute_conf(self.pre_M_resized, self.best_p_i_loc)
+		conf_all = np.sum(self.pre_M_resized)
+		distracter_score = conf_within / conf_all
+		print('The probability of been distracted is %s'%distracter_score)
+		if distracter_score > self.params['min_conf']:
 			return True
 		else:
 			return False
@@ -234,6 +238,10 @@ class TrackerVanilla(Tracker):
 		idx = np.argmax(conf_lsit)
 		self.cur_best_conf = conf_lsit[idx]
 		self.conf_q.put(conf_lsit[idx])
+
+		# Store values for computing distraction 
+		self.best_p_i_loc = loc_M[idx]
+		self.pre_M_resized = pre_M_resized
 
 		# Get the corresponding aff_param which is then
 		# used to predicted the cureent best location

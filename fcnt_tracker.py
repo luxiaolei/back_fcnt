@@ -119,8 +119,8 @@ feed_dict[gselCNN.gt_M] = ggt_M # corrpus the other nets?
 train_selCNN(sess, gselCNN, feed_dict)
 
 
-lselCNN = SelCNN('sel_local', vgg.conv4_3, (1,28,28,1))
-gselCNN = SelCNN('sel_global', vgg.conv5_3, (1,14,14,1))
+#lselCNN = SelCNN('sel_local', vgg.conv4_3, (1,28,28,1))
+#gselCNN = SelCNN('sel_global', vgg.conv5_3, (1,14,14,1))
 
 """
 # Gen anotated mask for target arear
