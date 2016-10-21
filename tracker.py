@@ -1,4 +1,5 @@
 
+import numpy as np
 
 from queue import Queue
 from scipy.misc import imresize
@@ -24,8 +25,8 @@ class Tracker:
 
 	Particle filter calss"""
 	def __init__(self, init_location,):
-		self.conf_q = Queue(maxsize=20)
-		self.pre_M_q = Queue(maxsize=20)
+		self.conf_q = Queue(maxsize=50)
+		self.pre_M_q = Queue(maxsize=50)
 		self.last_two_loc_q = Queue(maxsize=2)
 
 		self.location = init_location
@@ -52,7 +53,7 @@ class Tracker:
 
 	def gen_best_M(self):
 		"""Returns the best pre_M in records."""
-		assert self._qs_full()
+		#assert self._qs_full()
 
 		pre_Ms = [self.pre_M_q.get() for _ in range(20)]
 		confs = [self.conf_q.get() for _ in range(20)]

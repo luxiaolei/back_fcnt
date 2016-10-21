@@ -171,6 +171,7 @@ tracker = TrackerVanilla(gt)
 # Iter imgs
 gt_last = gt 
 for i in range(FLAGS.iter_max):
+	print('Step: ', i)
 	# Gnerates next frame infos
 	img, gt_cur, t  = next(inputProducer.gen_img)
 
