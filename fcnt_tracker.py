@@ -154,7 +154,7 @@ print('Performing local and gloal SelCNN feature map selection.')
 t = time.time()
 s_sel_maps, s_idx = lselCNN.sel_feature_maps(sess, vgg.conv4_3, feed_dict,FLAGS.num_sel)
 g_sel_maps, g_idx = gselCNN.sel_feature_maps(sess, vgg.conv5_3, feed_dict,FLAGS.num_sel)
-print('Sel-CNN selection porcesses cost : %2.f s'%(time.time() - t))
+print('Sel-CNN selection porcesses cost : %.2f s'%(time.time() - t))
 
 assert isinstance(s_sel_maps, np.ndarray)
 assert isinstance(g_sel_maps, np.ndarray)
@@ -171,7 +171,7 @@ t = time
 feed_dict = {gnet.input_maps: g_sel_maps, snet.input_maps: s_sel_maps}
 train_sgNet(sess, gnet, snet, sgt_M, ggt_M, feed_dict)
 s_sel_maps_t0 = s_sel_maps
-print('Train SGNets cost : %2.f s'%(time.time() - t))
+print('Train SGNets cost : %.2f s'%(time.time() - t))
 
 ## At t>0. Perform target localization and distracter detection at every frame,
 ## perform SNget adaptive update every 20 frames, perform SNet discrimtive 
@@ -212,7 +212,7 @@ for i in range(FLAGS.iter_max):
 		# Use the best predicted heat map to adaptive finetune SNet.
 		feed_dict_s = {snet.input_maps: s_sel_maps}
 		snet.adaptive_finetune(sess, best_M, feed_dict_s)
-		print('Adaptive finetune SNet costs : %2.f s'%(time.time() - t))
+		print('Adaptive finetune SNet costs : %.2f s'%(time.time() - t))
 
 	# Localize target with monte carlo sampling.
 	tracker.draw_particles(gt_last)
@@ -232,7 +232,7 @@ for i in range(FLAGS.iter_max):
 
 		# Use location predicted by SNet.
 		pre_loc = tracker.predict_location(pre_M_s, gt_last, resize_factor, t, 224)
-		print('Descrimtive finetune SNet costs : %2.f s'%(time.time() - t))
+		print('Descrimtive finetune SNet costs : %.2f s'%(time.time() - t))
 	# Set predicted location to be the next frame's ground truth
 	gt_last = pre_loc
 
@@ -242,6 +242,6 @@ for i in range(FLAGS.iter_max):
 	file_name = os.path.join(PRE_ROOT, file_name)
 	plt.imsave(file_name, img_bbox)
 	#IOU_eval()
-	print('Total time cost for frame %s  costs : %2.f s'%(s, (time.time() - t)))
+	print('Total time cost for frame %s  costs : %.2f s'%(s, (time.time() - t)))
 
 

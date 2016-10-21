@@ -5,6 +5,9 @@ import numpy as np
 
 from utils import variable_on_cpu, variable_with_weight_decay
 
+def non2zero(l):
+  return [0 if i==None else i for i in l] 
+
 class SelCNN:
 	def __init__(self, scope, vgg_conv_layer, gt_M_sz):
 		"""
@@ -126,11 +129,11 @@ class SelCNN:
 			idx: list, indexes of selected maps
 		"""
 		# Compute first derevatives w.r.t each feature maps
-		grads = tf.gradients(self.loss, self.feature_maps)
+		grads = non2zero(tf.gradients(self.loss, self.feature_maps))
 
 		# Compute diagnol part of Hessian which are the second derevatives
 		# of Loss_x w.r.t x
-		H_diag = [tf.gradients(grads[i], self.feature_maps[i])[0] for i in range(512)]
+		H_diag = [non2zero(tf.gradients(grads[i], self.feature_maps[i]))[0] for i in range(512)]
 
 		# Compute the significance vector, with each element stand for 
 		# the score of each feature map
