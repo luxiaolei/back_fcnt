@@ -213,7 +213,7 @@ class TrackerVanilla(Tracker):
 		# transform self.aff_params_M to location_M with each column 
 		# repersent [cx, cy, w, h] in the pre_M heat map
 		loc_M = np.zeros(self.aff_params_M.shape)
-		tlx, tly, w, h = gt
+		tlx, tly, w, h = gt_last
 		cx, cy = roi_size // 2, roi_size // 2
 		loc_M[:, 0] = cx
 		loc_M[:, 1] = cy
