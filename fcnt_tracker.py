@@ -12,6 +12,7 @@ from utils import img_with_bbox, IOU_eval
 
 import numpy as np 
 import tensorflow as tf
+import matplotlib.pylab as plt
 
 import os
 
@@ -30,7 +31,8 @@ tf.app.flags.DEFINE_integer('iter_max', 200,
 FLAGS = tf.app.flags.FLAGS
 
 ## Define varies path
-DATA_ROOT = 'data/Suv'
+DATA_ROOT = 'data/Dog1'
+PRE_ROOT = os.path.join(DATA_ROOT, 'img_loc')
 IMG_PATH = os.path.join(DATA_ROOT, 'img')
 GT_PATH = os.path.join(DATA_ROOT, 'groundtruth_rect.txt')
 VGG_WEIGHTS_PATH = 'vgg16_weights.npz'
@@ -183,19 +185,20 @@ for i in range(FLAGS.iter_max):
 	g_sel_maps = g_maps[...,g_idx]
 
 	feed_dict_g = { gnet.input_maps: g_sel_maps}
-	pre_M = sess.run(gnet.pre_M, feed_dict=feed_dict_g)
-	tracker.pre_M_q.put(pre_M)
+	pre_M_g = sess.run(gnet.pre_M, feed_dict=feed_dict_g)
+	tracker.pre_M_q.put(pre_M_g)
 
 	if i % 20 == 0:
 		# Retrive the most confident result within the intervening frames
 		best_M = tracker.gen_best_M()
 
 		# Use the best predicted heat map to adaptive finetune SNet.
-		snet.adaptive_finetune(sess, best_M)
+		feed_dict_s = {snet.input_maps: s_sel_maps}
+		snet.adaptive_finetune(sess, best_M, feed_dict_s)
 
 	# Localize target with monte carlo sampling.
 	tracker.draw_particles(gt_last)
-	pre_loc = tracker.predict_location(pre_M, gt_last, resize_factor, t)
+	pre_loc = tracker.predict_location(pre_M, gt_last, resize_factor, t, 224)
 	print('At time {0}, the most confident value is {1}'.format(t, tracker.cur_best_conf))
 
 	# Performs distracter detecion.
@@ -204,17 +207,20 @@ for i in range(FLAGS.iter_max):
 		# SNet using descrimtive loss.
 		# gen mask
 		phi = gen_mask_phi(roi.shape, pre_loc)
-		snet.descrimtive_finetune(sess, s_sel_maps_t0, sgt_M, roi, s_sel_maps, phi)
-		pre_M = sess.run(snet.pre_M, feed_dict=feed_dict)
+		snet.descrimtive_finetune(sess, s_sel_maps_t0, sgt_M, s_sel_maps, pre_M_g, phi)
+		pre_M_s = sess.run(snet.pre_M, feed_dict=feed_dict)
 
 		# Use location predicted by SNet.
-		pre_loc = tracker.predict_location(pre_M)
+		pre_loc = tracker.predict_location(pre_M_s, gt_last, resize_factor, t, 224)
 	
 	# Set predicted location to be the next frame's ground truth
 	gt_last = pre_loc
 
 	# Draw bbox on image. And print associated IoU score.
-	img_with_bbox(img, pre_loc, gt_cur)
-	IOU_eval()
+	img_bbox = img_with_bbox(img, pre_loc)
+	file_name = inputProducer.imgs_path_list[t-1].split('/')[-1]
+	file_name = os.path.join(PRE_ROOT, file_name)
+	plt.imsave(file_name, img_bbox)
+	#IOU_eval()
 
 

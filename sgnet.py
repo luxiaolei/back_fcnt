@@ -133,31 +133,43 @@ class SNet(SGNet):
 		"""
 		super(SNet, self).__init__(scope, vgg_conv_shape)
 
-	def adaptive_finetune(self, sess, best_M):
-		"""Finetune SNet with best pre_M predicetd by gNet."""
+	def adaptive_finetune(self, sess, best_M, feed_dict_s):
+		"""Finetune SNet with best pre_M predicetd by gNet.
+		
+		Args:
+			best_M: (1,14,14,1) shape array. gnet.pre_M 
+		"""
         # Upsampling best_M 
         #bres_M_resized = imresize(best_M, [1, 28, 28, 1], interp='bicubic')
         #bres_M_resized = tf.constant(bres_M_resized, dtype=tf.float32)
-		loss = self.loss(best_M)
+		best_M_resized = imresize(best_M[0,:,:,0], [28, 28], interp='bicubic')
+		loss = self.loss(best_M_resized)
 		train_op = SNet.optimizer.minimize(loss, var_list=self.variables)
-		sess.run(train_op)
+		print('SNet adaptive finetune')
+		for step in range(20):
+			loss_, _ = sess.run([train_op, loss], feed_dict = feed_dict_s)
+			print('loss: ', loss_)
 
 
-	def descrimtive_finetune(self, sess, conv4_3_t0, sgt_M, conv4_3_t, pre_M, phi):
+	def descrimtive_finetune(self, sess, conv4_3_t0, sgt_M, conv4_3_t, pre_M_g, phi):
 		# Type and shape check!
+		# reshape pre_M_g 
+		pre_M_g = imresize(pre_M_g[0,:,:,0], [28, 28], interp='bicubic')
+		pre_M_g = tf.constant(pre_M_g[np.newaxis,:,:,np.newaxis], dtype=tf.float32)
 		sgt_M = tf.constant(sgt_M, dtype=tf.float32)
-		pre_M = tf.constant(pre_M, dtype=tf.float32)
+		
 
-		Loss_t0 = tf.reduce_sum(tf.sqrt(tf.sub(sgt_M, self.pre_M)))
+		Loss_t0 = tf.reduce_mean(tf.squared_difference(sgt_M, self.pre_M))
 		feed_dict_t0 = {self.input_maps: conv4_3_t0}
 		train_op_t0 = SNet.optimizer.minimize(Loss_t0, var_list=self.variables)
 		
 
-		Loss_t =  tf.reduce_sum((1-phi) * tf.reduce_sum(tf.sqrt(tf.sub(pre_M, self.pre_M))))
+		Loss_t =  tf.reduce_sum((1-phi) * tf.reduce_mean(tf.squared_difference(pre_M_g, self.pre_M)))
 		feed_dict_t = {self.input_maps: conv4_3_t}
 		train_op_t = SNet.optimizer.minimize(Loss_t0, var_list=self.variables)
 		
-		for _ in range(20):
-			sess.run(train_op_t0, feed_dict_t0)
-			sess.run(train_op_t, feed_dict_t)
+		for step in range(20):
+			_, loss_0 = sess.run([train_op_t0, Loss_t0], feed_dict_t0)
+			_, loss_t = sess.run([train_op_t, Loss_t], feed_dict_t)
+			print('Loss 0:', loss_0, 'Loss t:', loss_t)
 		

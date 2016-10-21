@@ -4,11 +4,7 @@ from queue import Queue
 from scipy.misc import imresize
 from operator import add
 
-def compute_conf(roi, loc_p):
-	"""Helper func for computing confidence"""
-	cx,cy,w,h = loc_p
-	conf = np.sum(roi[y-int(0.5*h): y+int(0.5*h), x-int(0.5*w):x+int(0.5*w)])
-	return conf
+
 
 
 class Tracker:
@@ -112,7 +108,7 @@ class Tracker:
 		"""
 		Predicts current location linnearly according
 		to las two frames location. This may boost the 
-		robustnesss of obejct occlusion.
+		robustnesss of obejct blocking.
 		"""
 		pass
 
@@ -128,9 +124,9 @@ class Tracker:
 		distracter_score = conf_within / conf_all
 		print('The probability of been distracted is %s'%distracter_score)
 		if distracter_score > self.params['min_conf']:
-			return True
-		else:
 			return False
+		else:
+			return True
 			
 	@classmethod
 	def compute_conf(self, roi, loc_p):

@@ -3,6 +3,7 @@ import numpy as np
 import tensorflow as tf
 import skimage
 
+from skimage import draw
 from scipy.misc import imresize
 
 
@@ -74,10 +75,10 @@ def img_with_bbox(img_origin, gt_1):
 	dl_x, dl_y = tl_x, tl_y + h
 	dr_x, dr_y = tl_x + w, tl_y +h
 
-	rr1, cc1 = skimage.draw.line( tl_y,tl_x, tr_y, tr_x)
-	rr2, cc2 = skimage.draw.line( tl_y,tl_x, dl_y, dl_x)
-	rr3, cc3 = skimage.draw.line( dr_y,dr_x, tr_y, tr_x)
-	rr4, cc4 = skimage.draw.line( dr_y,dr_x, dl_y, dl_x)
+	rr1, cc1 = draw.line( tl_y,tl_x, tr_y, tr_x)
+	rr2, cc2 = draw.line( tl_y,tl_x, dl_y, dl_x)
+	rr3, cc3 = draw.line( dr_y,dr_x, tr_y, tr_x)
+	rr4, cc4 = draw.line( dr_y,dr_x, dl_y, dl_x)
 	img[rr1, cc1, :] = 1
 	img[rr2, cc2, :] = 1
 	img[rr3, cc3, :] = 1
