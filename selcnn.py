@@ -9,36 +9,42 @@ def non2zero(l):
   return [0 if i==None else i for i in l] 
 
 class SelCNN:
-	def __init__(self, scope, vgg_conv_layer, gt_M_sz):
+	def __init__(self, scope, gt_M_sz):
 		"""
 		selCNN network class. Initialize graph.
 
 		Args: 
 			name: string, name of the network.
-			vgg_conv_layer: tensor, either conv4_3 or cnv5_3 layer
+			vgg_conv_layer: tensor, eithedoner conv4_3 or cnv5_3 layer
 				of a pretrained vgg16 network
 		"""
 		# Initialize network
 		self.scope = scope
-		self.input_layer = vgg_conv_layer
+	
+		# COnstract a packed 1 x 28 x 28 x 512 dim input
+		self._get_input() 
+		
 
-		# Unpack vgg_conv_layer for partial derivatives
-		self.feature_maps = [vgg_conv_layer[...,i] for i in range(512)]
 		self.variables = []
+		# Best params for lselCNN: lr = 1e-6, decay_step = 500, decay rate 0.5
+		# with premutated img. rms loss. 
 		self.params = {
 		'dropout_rate': 0.3,
 		'k_size': [3, 3, 512, 1],
-		'wd': 0.5,
-		'lr_initial': 1e-8, # 1e-8 gives 438 after 200 steps, 1e-7 gives better maps?
-		'lr_decay_steps': 100,
-		'lr_decay_rate':  0.5
+		'wd': 0.0,
+		'lr_initial': 1e-6, # 1e-8 gives 438 after 200 steps, 1e-7 gives better maps?
+		'lr_decay_steps': 500 ,
+		'lr_decay_rate': 0.5
 		}
 		with tf.name_scope(scope) as scope:
 			self.pre_M = self._get_pre_M()
 			self.gt_M = tf.placeholder(tf.float32, shape=gt_M_sz)
 		self.pre_M_size = self.pre_M.get_shape().as_list()[1:3]
 		
-
+	def _get_input(self):
+		self.input_maps = tf.placeholder(shape=[1,28,28,512], dtype=tf.float32)
+		self.feature_maps = [self.input_maps[...,i] for i in range(512)]
+		
 
 	def _get_pre_M(self):
 		"""Build the sel-CNN graph and returns predicted Heat map."""
@@ -58,7 +64,7 @@ class SelCNN:
 		return pre_M
 
 
-	def train_op(self, global_step, add_regulizer=True):
+	def train_op(self, global_step, add_regulizer=False):
 		""" Train the network on the fist frame. 
 
 		Args:
@@ -102,26 +108,24 @@ class SelCNN:
 		self.loss = total_losses
 		return train_op, total_losses, lr, optimizer
 
-	def sel_feature_maps(self, sess, vgg_conv, feed_dict, num_sel):
+	def sel_feature_maps(self, sess, feed_dict, num_sel):
 		""" 
 		Selects saliency feature maps. 
 		The change of the Loss function by the permutation
 		of the feature maps dF, can be computed by a 
 		two-order Taylor expansions.
 
-		Further simplication can be done by only compute
+		Further simplication can be made by only compute
 		the diagonol part of the Hessian matrix.
 
 		S = - partial(L)/patial(F) * F 
 			+ 0.5 * sencondOrderPartial(L)/F
 
 		Args:
-			gt_M: tensor, ground truth heat map.
 			sel_maps: tensor, conv layer of vgg.
 			num_sel: int, number of selected maps.
 
 		Returns:
-			sel_maps: np.ndarray, conv layer of vgg.
 			idx: list, indexes of selected maps
 		"""
 		# Compute first derevatives w.r.t each feature maps
@@ -137,11 +141,11 @@ class SelCNN:
 			+ 0.5 * tf.reduce_sum(tf.mul(H_diag[i], self.feature_maps[i]**2)) for i in range(512)]
 		S_tensor = tf.pack(S, axis=0) # shape (512,)
 
-		vgg_maps, signif_v = sess.run([vgg_conv, S_tensor], feed_dict=feed_dict)
+		signif_v = sess.run([S_tensor], feed_dict=feed_dict)
 
 		# Retrieve the top-num_sel feature maps and corresponding idx
 		idxs = sorted(range(len(signif_v)), key=lambda i: signif_v[i])[-num_sel:]
-		best_maps = vgg_maps[...,idxs]
-		print('Selected maps shape: {0}'.format(best_maps.shape)) # e.g.(1, 28, 28, 384)
-		return best_maps, idxs
+		#best_maps = vgg_maps[...,idxs]
+		#print('Selected maps shape: {0}'.format(best_maps.shape)) # e.g.(1, 28, 28, 384)
+		return idxs
 		

@@ -7,6 +7,12 @@ from skimage import draw
 from scipy.misc import imresize
 
 
+def visual_selected_maps(s_sel_maps):
+	return (s_sel_maps.sum(axis=0).sum(axis=-1)/s_sel_maps.shape[-1])
+	
+
+
+
 def variable_on_cpu(scope, name, shape, initializer):
 	"""Helper to create a Variable stored on CPU memory.
 

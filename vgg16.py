@@ -261,6 +261,21 @@ class Vgg16:
         for p in preds:
             print(class_names[p], prob[0][p])
         self.img_porcessed = img_porcessed[0]
+       
+    def conv_arrays(self, sess, feed_dict):
+        """
+        Run a session to produce conv4_3 and conv5_3 layers in numpy 
+        array type. Conver conv5_3 to shape [1,28,28,512].
+
+        """
+        conv4_arr, conv5_arr = sess.run([self.conv4_3, self.conv5_3], feed_dict=feed_dict)
+
+        # Reshape conv5 arr
+        conv5_arr =  np.array([imresize(conv5_arr[0,:,:,i], [28, 28], interp='bicubic') for i in range(512)])
+        conv5_arr = np.swapaxes(conv5_arr, 0,2)[np.newaxis,...]
+        
+        assert conv4_arr.shape==(1,28,28,512) and conv5_arr.shape==(1,28,28,512)
+        return conv4_arr, conv5_arr
 
 
 if __name__ == '__main__':

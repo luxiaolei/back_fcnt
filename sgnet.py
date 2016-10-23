@@ -49,7 +49,7 @@ class SGNet:
 		#assert vgg_conv_shape[-1] == self.params['num_fms']
         
 		with tf.name_scope('conv1') as scope:
-			kernel = tf.Variable(tf.truncated_normal([9,9,out_num,36],         dtype=tf.float32,stddev=1e-1), name='weights')
+			kernel = tf.Variable(tf.truncated_normal([9,9,out_num,36], dtype=tf.float32,stddev=1e-1), name='weights')
 
 			conv = tf.nn.conv2d(self.input_maps, kernel, [1, 1, 1, 1], padding='SAME')
 			biases = tf.Variable(tf.constant(0.0, shape=[36], dtype=tf.float32),trainable=True, name='biases')
@@ -125,7 +125,7 @@ class GNet(SGNet):
 
 
 class SNet(SGNet):
-	lr = 1e-8
+	lr = 1e-2
 	optimizer = tf.train.GradientDescentOptimizer(lr)
 	def __init__(self, scope, vgg_conv_shape):
 		"""
@@ -140,13 +140,12 @@ class SNet(SGNet):
 			best_M: (1,14,14,1) shape array. gnet.pre_M 
 		"""
         # Upsampling best_M 
-        #bres_M_resized = imresize(best_M, [1, 28, 28, 1], interp='bicubic')
-        #bres_M_resized = tf.constant(bres_M_resized, dtype=tf.float32)
+
 		best_M_resized = imresize(best_M[0,:,:,0], [28, 28], interp='bicubic')
 		loss = self.loss(best_M_resized)
 		train_op = SNet.optimizer.minimize(loss, var_list=self.variables)
 		print('SNet adaptive finetune')
-		for step in range(20):
+		for step in range(200):
 			loss_, _ = sess.run([train_op, loss], feed_dict = feed_dict_s)
 			print('loss: ', loss_)
 
@@ -168,7 +167,7 @@ class SNet(SGNet):
 		feed_dict_t = {self.input_maps: conv4_3_t}
 		train_op_t = SNet.optimizer.minimize(Loss_t0, var_list=self.variables)
 		
-		for step in range(20):
+		for step in range(200):
 			_, loss_0 = sess.run([train_op_t0, Loss_t0], feed_dict_t0)
 			_, loss_t = sess.run([train_op_t, Loss_t], feed_dict_t)
 			print('Loss 0:', loss_0, 'Loss t:', loss_t)

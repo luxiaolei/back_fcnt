@@ -90,6 +90,7 @@ class InputProducer:
 		new_y = new_cx - gt[3] // 2
 	    
 		roi_resized = imresize(roi, (roi_size, roi_size))
+		roi_resized = np.transpose(roi_resized, [1,0,2]) # test
 		resize_factor = roi_size / roi.shape[0]
 		return roi_resized, [new_x, new_y, gt[2], gt[3]], resize_factor
 
@@ -151,7 +152,7 @@ class InputProducer:
 		convas = convas / convas.max()
 		#convas = np.transpose(convas)
 
-		return convas#[..., np.newaxis]
+		return convas[np.newaxis,:,:,np.newaxis]
 
 	# Deprecated method.
 	def porcess_img(img):
