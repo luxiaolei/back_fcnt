@@ -25,8 +25,8 @@ class Tracker:
 
 	Particle filter calss"""
 	def __init__(self, init_location,):
-		self.conf_q = Queue(maxsize=50)
-		self.pre_M_q = Queue(maxsize=50)
+		self.conf_q = Queue(maxsize=99999)
+		self.pre_M_q = Queue(maxsize=99999)
 		self.last_two_loc_q = Queue(maxsize=2)
 
 		self.location = init_location
