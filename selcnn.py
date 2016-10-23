@@ -42,7 +42,7 @@ class SelCNN:
 		self.pre_M_size = self.pre_M.get_shape().as_list()[1:3]
 		
 	def _get_input(self):
-		self.input_maps = tf.placeholder(shape=[1,28,28,512], dtype=tf.float32)
+		self.input_maps = tf.placeholder(shape=[1,224,224,512], dtype=tf.float32)
 		self.feature_maps = [self.input_maps[...,i] for i in range(512)]
 		
 
