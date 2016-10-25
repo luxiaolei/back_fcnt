@@ -85,7 +85,7 @@ def img_with_bbox(img_origin, gt_1):
 	img[rr4, cc4, :] = 1
 	return img
 
-def gauss2d(shape=(6,6),sigma=0.5):
+def gauss2d(shape=(6,6),sigma=1000):
 	"""
 	2D gaussian mask - should give the same result as MATLAB's
 	fspecial('gaussian',[shape],[sigma])

@@ -10,7 +10,7 @@ from imagenet_classes import class_names
 
 class Vgg16:
     def __init__(self, weights=None, sess=None):
-        self.imgs = tf.placeholder(tf.float32, [None, 224, 224, 3])
+        self.imgs = tf.placeholder(tf.float32, [1, 224, 224, 3])
 
         with tf.name_scope('vgg') as scope:
             self.convlayers()
