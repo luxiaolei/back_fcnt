@@ -20,7 +20,7 @@ class InputProducer:
 
 		self.roi_params = {
 		'roi_size': 224, 
-		'roi_scale': 2.5,
+		'roi_scale': 3,
 		'l_off': [0,0]
 		}
 

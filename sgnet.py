@@ -9,23 +9,19 @@ from utils import variable_on_cpu, variable_with_weight_decay
 
 
 class SGNet:
-	# Define class level optimizer
-	lr = 1e-6
-	#optimizer = tf.train.GradientDescentOptimizer(lr)
-	def __init__(self, scope, vgg_conv_shape):
+
+	def __init__(self, scope, conv_tensor, sel_idx):
 		"""
 		Base calss for SGNet, defines the network structure
 		"""
 		self.scope = scope
-		self.params = {
-		'num_fms': 200, # number of selected featrue maps, inputs of the network
-		'wd': 0.5, # L2 regulization coefficient
-		}
+		self.params = {'wd': 0.05} # L2 regulization coefficien
+		
 		self.variables = []
 		with tf.variable_scope(scope) as scope:
-			self.pre_M = self._build_graph(vgg_conv_shape)
+			self.pre_M = self._build_graph(conv_tensor, sel_idx)
 
-	def _build_graph(self, vgg_conv_shape):
+	def _build_graph(self, conv_tensor, sel_idx):
 		"""
 		Define Structure. 
 		The first additional convolutional
@@ -42,62 +38,51 @@ class SGNet:
 		"""
 		self.variables = []
 		self.kernel_weights = []
-		out_num = vgg_conv_shape[-1]
-
-		self.input_maps = tf.placeholder(tf.float32, shape=vgg_conv_shape,
-		    name='selected_maps')
-		#assert vgg_conv_shape[-1] == self.params['num_fms']
-        
+		sel_num = len(sel_idx)
+		
+		self.input_maps = tf.pack([conv_tensor[...,i] for i in sel_idx], axis=-1)        
 		with tf.name_scope('conv1') as scope:
-			kernel = tf.Variable(tf.truncated_normal([9,9,out_num,36],         dtype=tf.float32,stddev=1e-1), name='weights')
+			kernel = tf.Variable(tf.truncated_normal([9,9,sel_num,36], dtype=tf.float32,stddev=1e-1), name='weights')
 
 			conv = tf.nn.conv2d(self.input_maps, kernel, [1, 1, 1, 1], padding='SAME')
-			biases = tf.Variable(tf.constant(0.0, shape=[36], dtype=tf.float32),trainable=True, name='biases')
+			biases = tf.Variable(tf.constant(0.0, shape=[36], dtype=tf.float32), name='biases')
 			out = tf.nn.bias_add(conv, biases)
 			conv1 = tf.nn.relu(out, name=scope)
 			self.variables += [kernel, biases]
 			self.kernel_weights += [kernel]
-			print(conv1.get_shape().as_list(), 'conv1 shape')
 
 
 		with tf.name_scope('conv2') as scope:
 			kernel = tf.Variable(tf.truncated_normal([5,5,36,1], dtype=tf.float32, stddev=1e-1), name='weights')
 			conv = tf.nn.conv2d(conv1, kernel , [1, 1, 1, 1], padding='SAME')
-			print(conv.get_shape().as_list(), 'conv shape')
-			biases = tf.Variable(tf.constant(0.0, shape=[1], dtype=tf.float32),
-			                     trainable=True, name='biases')
-			out = tf.nn.bias_add(conv, biases)
-			conv2 = tf.nn.relu(out, name=scope)
+			biases = tf.Variable(tf.constant(0.0, shape=[1], dtype=tf.float32), name='biases')
+			pre_M = tf.nn.bias_add(conv, biases)
 			self.variables += [kernel, biases]
 			self.kernel_weights += [kernel]
 
-		print('Shape of the out put heat map for %s is %s'%(self.scope, conv2.get_shape().as_list()))
-		return conv2
+			# Turn pre_M to a rank2 tensor within range 0-1.
+			pre_M = tf.squeeze(pre_M)
+			pre_M /= tf.reduce_max(pre_M)
+		print('Shape of the out put heat map for %s is %s'%(self.scope, pre_M.get_shape().as_list()))
+		return pre_M
 
 	def loss(self, gt_M):
 		"""Returns Losses for the current network.
 
 		Args:
-		    gt_M: Tensor, ground truth heat map.
-
+		    gt_M: np.ndarry, ground truth heat map.
 		Returns:
 		    Loss: 
 		"""
-
 		# Assertion
 		assert isinstance(gt_M, np.ndarray)
-		if len(gt_M.shape) == 2:
-			# gt_M is a 2D mask
-			gt_M = tf.constant(gt_M.reshape((1,gt_M.shape[0], gt_M.shape[1], 1)), dtype=tf.float32)
-		elif len(gt_M.shape) == 4:
-			# gt_M is SGNet.pre_M
-			gt_M = tf.constant(gt_M, dtype=tf.float32)
-		else:
-			print('Unhandled input shape: {0}'.format(gt_M.shape))
+		assert len(gt_M.shape) == 2
+		assert len(self.pre_M.get_shape().as_list()) == 2
+		gt_M = tf.constant(gt_M, dtype=tf.float32)
 
 		with tf.name_scope(self.scope) as scope:
 			beta = tf.constant(self.params['wd'], name='beta')
-			loss_rms = tf.reduce_mean(tf.squared_difference(gt_M, self.pre_M))
+			loss_rms = tf.reduce_max(tf.squared_difference(gt_M, self.pre_M))
 			loss_wd = [tf.reduce_mean(tf.square(w)) for w in self.kernel_weights]
 			loss_wd = beta * tf.add_n(loss_wd)
 			total_loss = loss_rms + loss_wd
@@ -116,35 +101,30 @@ class SGNet:
 
 
 class GNet(SGNet):
-	def __init__(self, scope, vgg_conv_shape):
+	def __init__(self, scope, conv_tensor, sel_idx):
 		"""
 		Fixed params once trained in the first frame
 		"""
-		super(GNet, self).__init__(scope, vgg_conv_shape)
+		super(GNet, self).__init__(scope, conv_tensor, sel_idx)
 
 
 
 class SNet(SGNet):
-	lr = 1e-8
-	optimizer = tf.train.GradientDescentOptimizer(lr)
-	def __init__(self, scope, vgg_conv_shape):
+	def __init__(self, scope, conv_tensor, sel_idx):
 		"""
 		Initialized in the first frame
 		"""
-		super(SNet, self).__init__(scope, vgg_conv_shape)
+		super(SNet, self).__init__(scope, conv_tensor, sel_idx)
 
-	def adaptive_finetune(self, sess, best_M, feed_dict_s):
+	def adaptive_finetune(self, sess, gt_M, fd_s_adp, lr=1e-6):
 		"""Finetune SNet with best pre_M predicetd by gNet.
 		
 		Args:
 			best_M: (1,14,14,1) shape array. gnet.pre_M 
 		"""
-        # Upsampling best_M 
-        #bres_M_resized = imresize(best_M, [1, 28, 28, 1], interp='bicubic')
-        #bres_M_resized = tf.constant(bres_M_resized, dtype=tf.float32)
-		best_M_resized = imresize(best_M[0,:,:,0], [28, 28], interp='bicubic')
-		loss = self.loss(best_M_resized)
-		train_op = SNet.optimizer.minimize(loss, var_list=self.variables)
+		optimizer = tf.train.GradientDescentOptimizer(lr)
+		loss = self.loss(gt_M)
+		train_op = optimizer.minimize(loss, var_list=self.variables)
 		print('SNet adaptive finetune')
 		for step in range(20):
 			loss_, _ = sess.run([train_op, loss], feed_dict = feed_dict_s)

@@ -66,7 +66,7 @@ def print_prob(prob):
 	return top1
 
 # draw on img
-def img_with_bbox(img_origin, gt_1):
+def img_with_bbox(img_origin, gt_1, c=1):
 	img =np.copy(img_origin)
 	gt_1 = [int(i) for i in gt_1]
 	w, h = gt_1[2:]
@@ -79,10 +79,10 @@ def img_with_bbox(img_origin, gt_1):
 	rr2, cc2 = draw.line( tl_y,tl_x, dl_y, dl_x)
 	rr3, cc3 = draw.line( dr_y,dr_x, tr_y, tr_x)
 	rr4, cc4 = draw.line( dr_y,dr_x, dl_y, dl_x)
-	img[rr1, cc1, :] = 1
-	img[rr2, cc2, :] = 1
-	img[rr3, cc3, :] = 1
-	img[rr4, cc4, :] = 1
+	img[rr1, cc1, :] = c
+	img[rr2, cc2, :] = c
+	img[rr3, cc3, :] = c
+	img[rr4, cc4, :] = c
 	return img
 
 def gauss2d(shape=(6,6),sigma=1000):

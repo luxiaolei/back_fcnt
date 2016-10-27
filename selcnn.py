@@ -9,6 +9,52 @@ def non2zero(l):
   return [0 if i==None else i for i in l] 
 
 class SelCNN:
+	
+	@staticmethod
+	def select_fms(sess, conv_tensor, gt, rz_factor, fd, sel_num):
+		"""
+		Select feature maps of vg conv layers, by computing
+		within/overall score of target region inside a map
+
+		Args:
+			sess: tf.Session object.
+			conv_tensor: tf.Tensor, shoudld be either conv4_3 or conv5_3 resized and normalized layer.
+			gt: [x,y,w,h], groundtruth of target in original image.
+			rz_factor: float, size in original img * rz_factor = size in extracted roi img.
+			fd: dict, feed_dict for feeding a vgg network.
+			sel_num: int, number of slected maps.
+
+		Returns:
+			idx: list with length sel_num
+		"""
+		assert isinstance(conv_tensor,tf.Tensor)
+		assert isinstance(conv_tensor,tf.Tensor)		
+		def compute_score(roi, gt, rz_factor):
+			"""Helper func for computing confidence"""
+			roi = np.copy(roi)
+			_,_,w,h = gt
+			w_half = int(0.5*w*rz_factor)# resize_factor
+			h_half = int(0.5*h*rz_factor)
+			c = 224/2
+			conf_i = roi[c-h_half:c+h_half, c-w_half:c+w_half].sum()
+			conf_u = roi.sum()
+			if conf_u == 0:
+				return 0.0
+			else:
+				return conf_i / conf_u
+		
+		# Get values of conv layer
+		conv_arr = sess.run(conv_tensor, feed_dict=fd)
+		
+		# Compute score
+		scores = []
+		for idx in range(512):
+			scores += [compute_score(conv_arr[0,...,idx], gt, rz_factor)]
+		selected_idx = sorted(range(len(scores)), key=lambda i: scores[i])[-sel_num:]
+		return selected_idx
+			
+
+
 	def __init__(self, scope, vgg_conv_layer, gt_M_sz):
 		"""
 		selCNN network class. Initialize graph.

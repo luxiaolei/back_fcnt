@@ -16,6 +16,13 @@ class Vgg16:
             self.convlayers()
             self.fc_layers()
             self.probs = tf.nn.softmax(self.fc3l)
+            
+            # Resize conv4_3 and conv5_3 to 224,224 size, and perform normalization
+            conv4_rz = tf.image.resize_images(self.conv4_3, 224, 224)
+            self.conv4_3_norm = conv4_rz / tf.reduce_max(conv4_rz)
+            conv5_rz = tf.image.resize_images(self.conv5_3, 224, 224)
+            self.conv5_3_norm = conv5_rz / tf.reduce_max(conv5_rz)
+
             if weights is not None and sess is not None:
                 self.load_weights(weights, sess)
     
@@ -198,6 +205,7 @@ class Vgg16:
             out = tf.nn.bias_add(conv, biases)
             self.conv5_3 = tf.nn.relu(out, name=scope)
             self.parameters += [self.kernel5_3, biases]
+            self.variables = self.parameters[:] # variables for backprop SGNets
 
         # pool5
         self.pool5 = tf.nn.max_pool(self.conv5_3,
