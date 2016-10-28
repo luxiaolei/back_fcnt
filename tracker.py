@@ -207,7 +207,7 @@ class TrackerVanilla(Tracker):
 		aff_params_M = rand_norml_M * aff_sig_M
 
 		tmp = np.copy(aff_params_M)
-		for s in range(self.params['particle_scales']):#, 1.4, 1.6, 1.8, 2.]:
+		for s in range(len(self.params['particle_scales'])):#, 1.4, 1.6, 1.8, 2.]:
 			scale_M = np.copy(tmp)
 			aff_params_M = np.vstack((aff_params_M, scale_M))
 		self.aff_params_M = aff_params_M
@@ -236,17 +236,15 @@ class TrackerVanilla(Tracker):
 		loc_M[:, 1] = cy
 		loc_M[:, 2] = rz_factor * w 
 		loc_M[:, 3] = rz_factor * h
-		#self.aff_parms_M[:, 2] *= w
-		#self.aff_parms_M[:, 3] *= h
+		self.aff_params_M[:, 2] *= rz_factor
+		self.aff_params_M[:, 3] *= rz_factor
         
-
-
 		idx = self.params['p_num']
 		for s in self.params['particle_scales']:
 			#loc_M[idx: idx+idx, 2] *= s
 			#loc_M[idx: idx+idx, 3] *= s
-			self.aff_parms_M[idx: idx+idx, 2] *= s
-			self.aff_parms_M[idx: idx+idx, 3] *= s
+			self.aff_params_M[idx: idx+idx, 2] *= s
+			self.aff_params_M[idx: idx+idx, 3] *= s
 			idx += idx
 
 		loc_M += self.aff_params_M
@@ -275,7 +273,7 @@ class TrackerVanilla(Tracker):
 		# used to predicted the cureent best location
 		best_aff =  self.aff_params_M[idx]
 		self.pre_location = self.aff2loc(gt_last, best_aff, rz_factor)
-
+		self.pre_location = [int(i) for i in self.pre_location]
 		# Stack into records queue
 		self.loc_q.put(self.pre_location)
 		self.conf_q.put(self.cur_best_conf)
@@ -293,4 +291,5 @@ class TrackerVanilla(Tracker):
 
 
 		
+
 
