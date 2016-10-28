@@ -10,7 +10,7 @@ from imagenet_classes import class_names
 
 class Vgg16:
     def __init__(self, weights=None, sess=None):
-        self.imgs = tf.placeholder(tf.float32, [1, 224, 224, 3])
+        self.imgs = tf.placeholder(tf.float32, [None, 224, 224, 3], name='vgg_imgs')
 
         with tf.name_scope('vgg') as scope:
             self.convlayers()
@@ -18,10 +18,11 @@ class Vgg16:
             self.probs = tf.nn.softmax(self.fc3l)
             
             # Resize conv4_3 and conv5_3 to 224,224 size, and perform normalization
-            conv4_rz = tf.image.resize_images(self.conv4_3, 224, 224)
-            self.conv4_3_norm = conv4_rz / tf.reduce_max(conv4_rz)
-            conv5_rz = tf.image.resize_images(self.conv5_3, 224, 224)
-            self.conv5_3_norm = conv5_rz / tf.reduce_max(conv5_rz)
+            size_tensosr = tf.constant([224,224])
+            conv4_rz = tf.image.resize_images(self.conv4_3, size_tensosr)
+            self.conv4_3_norm = conv4_rz #/ tf.reduce_max(conv4_rz) # TODO, causing ResourceAllocating error when backprop?
+            conv5_rz = tf.image.resize_images(self.conv5_3, size_tensosr)
+            self.conv5_3_norm = conv5_rz #/ tf.reduce_max(conv5_rz)
 
             if weights is not None and sess is not None:
                 self.load_weights(weights, sess)

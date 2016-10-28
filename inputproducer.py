@@ -114,7 +114,7 @@ class InputProducer:
 		# Generates 2D gaussian mask
 		scale = min([w,h]) / 3 # To be consistence with the paper
 		mask = gauss2d([h, w], sigma=scale)
-		print(mask.max(), 'max of mask')
+		#print(mask.max(), 'max of mask')
 
 		# bottom right coordinate
 		x2 = x + w - 1
@@ -143,15 +143,69 @@ class InputProducer:
 
 		# Extrac ROI and resize bicubicly
 		convas, _, _  = self.extract_roi(convas, self.first_gt)
-		print(convas.shape)
+		#print(convas.shape)
 		convas = imresize(convas[...,0], fea_sz[:2], interp='bicubic')
-		print(convas.max(), 'max convas')
+		#print(convas.max(), 'max convas')
 
 		# Swap back, and normalize
 		convas = convas / convas.max()
 		#convas = np.transpose(convas)
 
 		return convas#[..., np.newaxis]
+
+	def gen_batches(self, img, gt, n_samples=5000, batch_sz=10, pos_ratio=0.7, scale_factors=None):
+		# Gen n_pos number of scaled samples 
+		n_pos = int(n_samples/pos_ratio)
+		if scale_factors is None: scale_factors = np.arange(0.2, 5., 0.5)
+		samples = []
+		targets = []
+		for pos_idx in range(n_pos):
+			sf_idx = pos_idx % len(scale_factors)
+			self.roi_params['roi_scale'] = scale_factors[sf_idx]
+			roi, _, _ = self.extract_roi(img, gt)
+			gt_M = self.gen_mask((224,224)).astype(np.float32)
+			samples += [roi]
+			targets += [gt_M]
+
+		# Gen negative samples with random scale factor
+
+		gt_M_neg = np.zeros((224,224), dtype=np.float32)
+		for _ in range(n_samples - n_pos):
+			lb, up = scale_factors[0], scale_factors[-1]
+			self.roi_params['roi_scale'] = np.random.uniform(lb, up)
+			roi = gen_neg_samples(img, gt)
+			samples += [roi]
+			targets += [gt_M_neg]
+
+		# Random shuffeling 
+		rand_idx = np.random.permutation(len(samples))
+		samples = np.array(samples)[rand_idx]
+		targets = np.array(targets)[rand_idx]
+
+		# Batching
+		sample_batches = [samples[i:i+batch_sz] for i in range(len(samples)) if i % batch_sz==0]
+		target_batches = [targets[i:i+batch_sz] for i in range(len(targets)) if i % batch_sz==0]
+		return sample_batches, target_batches
+
+	def gen_neg_samples(self, img, gt_1):
+
+		delta = 30
+		
+		#x,y,w,h = loc
+		img = img.copy()
+		#img[y-int(0.5*h): y+int(0.5*h), x-int(0.5*w):x+int(0.5*w)] = 0
+		w, h = gt_1[2:]
+		tl_x, tl_y = gt_1[:2]
+		tr_x, tr_y = tl_x + w, tl_y 
+		dl_x, dl_y = tl_x, tl_y + h
+		dr_x, dr_y = tl_x + w, tl_y +h
+		img[tl_y:dr_y+delta,tl_x:dr_x+delta] = img.mean()
+		
+		# randomly extract an arear same with gt
+		x = np.random.randint(0, 224-w)
+		y = np.random.randint(0, 224-h)
+		roi_rand,_,_ = self.extract_roi(img, [y,x, w,h])
+		return roi_rand
 
 	# Deprecated method.
 	def porcess_img(img):

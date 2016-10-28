@@ -52,7 +52,42 @@ def init_vgg():
 
 
 
-def train_SGNets(sess, vgg, gnet, snet, gt_M, fd):
+
+
+def train_SGNets(sess, vgg, snet, gnet, inputProducer):
+    loss = gnet.loss() + snet.loss()
+    vars_train = vgg.variables + gnet.variables + snet.variables
+
+    # Backprop using SGD and updates vgg variables and sgnets variables
+    global_step = tf.Variable(0, trainable=False)
+    lr_exp = tf.train.exponential_decay(
+            1e-3, # Initial learning rate 
+            global_step, 
+            1000, # Decay steps 
+            0.9, # Decay rate 
+            name='sg_lr')
+    optimizer = tf.train.GradientDescentOptimizer(lr_exp)
+    train_op = optimizer.minimize(loss, var_list= vars_train, global_step=global_step)
+    sess.run(tf.initialize_variables(snet.variables + gnet.variables + [global_step]))
+
+    losses = []
+	num_epoch = 10
+    sample_batches, target_batches = inputProducer.gen_batches(img, gt)
+    print('Start training the SGNets........ for %s epochs'%num_epoch)
+    for ep in range(num_epoch):
+        step = 1
+        for roi, target in zip(sample_batches, target_batches):
+            t = time.time()
+            fd = {vgg.imgs: roi, gnet.gt_M: target, snet.gt_M: target}
+            pre_M_g, pre_M_s, l, _ = sess.run([gnet.pre_M, snet.pre_M, loss, train_op], feed_dict=fd)
+            losses += [l]
+            step += 1
+            if step % 50 == 0:
+                print('Epoch: ', ep+1, 'Step: ', (ep+1)*step, 'Loss : %.2f'%l, 'Speed: %2.f s/batch'%(time.time()-t))
+
+
+# Deprecated! 
+def train_SGNets_dep(sess, vgg, gnet, snet, gt_M, fd):
 	# Initialize sgnets variables untill loss <= 1
 	global_step = tf.Variable(0, trainable=False)
 	sgnet_vars = snet.variables + gnet.variables
@@ -108,12 +143,10 @@ idx_c5 = SelCNN.select_fms(sess, vgg.conv5_3_norm, gt, rz_factor, fd, FLAGS.sel_
 # Instainate SGNets with conv tensors and training.
 snet = SNet('SNet', vgg.conv4_3_norm, idx_c4)
 gnet = GNet('GNet', vgg.conv5_3_norm, idx_c5)
-pre_M_g, pre_M_s = train_SGNets(sess, vgg, gnet, snet, gt_M, fd)
+train_SGNets(sess, vgg, snet, gnet, inputProducer)
 
-
-
+inputProducer.roi_params['roi_scale'] = 3
 tracker = TrackerVanilla(gt)
-
 # Iter imgs
 gt_last = gt 
 conf_list, roi_list = [], []
@@ -130,7 +163,7 @@ for i in range(FLAGS.iter_max):
 	## Perform Target localiation predicted by GNet
 	# Get heat map predicted by GNet
 	fd = {vgg.imgs : [roi]}
-	pre_M_g, pre_M_s = sess.run([gnet.pre_M, snet.pre_M], feed_dict=fd)
+	pre_M_g, _ = sess.run([gnet.pre_M, snet.pre_M], feed_dict=fd)
 	
 	# Adaptive fine tune SNet, 
 	if 3 % FLAGS.S_adp_steps == 0:
@@ -139,9 +172,27 @@ for i in range(FLAGS.iter_max):
 		fd_s_adp = {vgg.imgs: [roi_best]}
 		snet.adaptive_finetune(sess, gt_M, fd_s_adp, lr=1e-6)
 
+	# Performs distracter detecion.
+	# Untested!
+	if False: #tracker.distracted():
+		# if detects distracters, then update 
+		# SNet using descrimtive loss.
+		# gen mask
+		print("Distractor detected! ")
+		t_ds = time.time()
+		phi = gen_mask_phi(roi.shape, pre_loc)
+		snet.descrimtive_finetune(sess, s_sel_maps_t0, gt_M, s_sel_maps, pre_M_g, phi)
+		pre_M_s = sess.run(snet.pre_M, feed_dict=feed_dict)
+
+		# Use location predicted by SNet.
+		pre_M_s = np.transpose(pre_M_s, [0,2,1,3])
+		pre_loc = tracker.predict_location(pre_M_s, gt_last, resize_factor, t, 224)
+		print('Descrimtive finetune SNet costs : %.2f s'%(time.time() - t_ds))
+
+
 	# Localize target with monte carlo sampling.
 	tracker.draw_particles()
-	pre_loc = tracker.predict_location(pre_M_g, gt_last, rz_factor, img)
+	pre_loc = tracker.predict_location(pre_M_g[0], gt_last, rz_factor, img)
 	print('At frame {0}, the most confident value is {1}'.format(i, tracker.cur_best_conf))
 	print('Time consumed : %.2f s'%(time.time() - t_enter))
 	gt_last = pre_loc

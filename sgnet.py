@@ -20,6 +20,8 @@ class SGNet:
 		self.variables = []
 		with tf.variable_scope(scope) as scope:
 			self.pre_M = self._build_graph(conv_tensor, sel_idx)
+			self.gt_M = tf.placeholder(dtype=tf.float32, shape=(None,224,224),name='gt_M')
+
 
 	def _build_graph(self, conv_tensor, sel_idx):
 		"""
@@ -38,9 +40,9 @@ class SGNet:
 		"""
 		self.variables = []
 		self.kernel_weights = []
-		sel_num = len(sel_idx)
+		sel_num = 512#len(sel_idx)
 		
-		self.input_maps = tf.pack([conv_tensor[...,i] for i in sel_idx], axis=-1)        
+		self.input_maps = conv_tensor#tf.pack([conv_tensor[...,i] for i in sel_idx], axis=-1)        
 		with tf.name_scope('conv1') as scope:
 			kernel = tf.Variable(tf.truncated_normal([9,9,sel_num,36], dtype=tf.float32,stddev=1e-1), name='weights')
 
@@ -63,10 +65,9 @@ class SGNet:
 			# Turn pre_M to a rank2 tensor within range 0-1.
 			pre_M = tf.squeeze(pre_M)
 			pre_M /= tf.reduce_max(pre_M)
-		print('Shape of the out put heat map for %s is %s'%(self.scope, pre_M.get_shape().as_list()))
 		return pre_M
 
-	def loss(self, gt_M):
+	def loss(self):
 		"""Returns Losses for the current network.
 
 		Args:
@@ -75,14 +76,13 @@ class SGNet:
 		    Loss: 
 		"""
 		# Assertion
-		assert isinstance(gt_M, np.ndarray)
-		assert len(gt_M.shape) == 2
-		assert len(self.pre_M.get_shape().as_list()) == 2
-		gt_M = tf.constant(gt_M, dtype=tf.float32)
+		#assert isinstance(gt_M, np.ndarray)
+		#assert len(gt_M.shape) == 2
+		#assert len(self.pre_M.get_shape().as_list()) == 2
 
 		with tf.name_scope(self.scope) as scope:
 			beta = tf.constant(self.params['wd'], name='beta')
-			loss_rms = tf.reduce_max(tf.squared_difference(gt_M, self.pre_M))
+			loss_rms = tf.reduce_max(tf.squared_difference(self.gt_M, self.pre_M))
 			loss_wd = [tf.reduce_mean(tf.square(w)) for w in self.kernel_weights]
 			loss_wd = beta * tf.add_n(loss_wd)
 			total_loss = loss_rms + loss_wd

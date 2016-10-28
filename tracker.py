@@ -30,6 +30,7 @@ class Tracker:
 		self.img_q = Queue(maxsize=99999)
 		self.location = init_location
 		self.params = self._init_params(init_location)
+		print('i am new!')
 
 
 
@@ -173,6 +174,7 @@ class TrackerVanilla(Tracker):
 	def _update_params(self):
 		"""Update aff_sig param."""
 		self.params['aff_sig'] = [10, 10, 0.05, 0.05]
+		self.params['particle_scales'] = np.arange(0.1, 5., 0.5)       
 
 	# Tested
 	def draw_particles(self):
@@ -205,7 +207,7 @@ class TrackerVanilla(Tracker):
 		aff_params_M = rand_norml_M * aff_sig_M
 
 		tmp = np.copy(aff_params_M)
-		for s in np.arange(0.1, 2, 0.1):#, 1.4, 1.6, 1.8, 2.]:
+		for s in range(self.params['particle_scales']):#, 1.4, 1.6, 1.8, 2.]:
 			scale_M = np.copy(tmp)
 			aff_params_M = np.vstack((aff_params_M, scale_M))
 		self.aff_params_M = aff_params_M
@@ -234,14 +236,20 @@ class TrackerVanilla(Tracker):
 		loc_M[:, 1] = cy
 		loc_M[:, 2] = rz_factor * w 
 		loc_M[:, 3] = rz_factor * h
-		loc_M += self.aff_params_M
+		#self.aff_parms_M[:, 2] *= w
+		#self.aff_parms_M[:, 3] *= h
+        
+
 
 		idx = self.params['p_num']
-		for s in np.arange(0.1, 2, 0.1):
-			loc_M[idx: idx+idx, 2] *= s
-			loc_M[idx: idx+idx, 3] *= s
+		for s in self.params['particle_scales']:
+			#loc_M[idx: idx+idx, 2] *= s
+			#loc_M[idx: idx+idx, 3] *= s
+			self.aff_parms_M[idx: idx+idx, 2] *= s
+			self.aff_parms_M[idx: idx+idx, 3] *= s
 			idx += idx
 
+		loc_M += self.aff_params_M
 
 
 		loc_M = loc_M.astype(np.int)
