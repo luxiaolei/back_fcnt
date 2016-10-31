@@ -25,6 +25,9 @@ tf.app.flags.DEFINE_integer('n_samples_per_batch', 5000,
                           """SGnet works""")
 tf.app.flags.DEFINE_integer('iter_max', 1349,
 							"""Max iter times through imgs""")
+
+tf.app.flags.DEFINE_string('model_name', 'all_vars_lr_1e3_posratio_7',
+						"""true for train, false for eval""")
 FLAGS = tf.app.flags.FLAGS
 
 ## Define varies pathes
