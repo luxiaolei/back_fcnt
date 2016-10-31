@@ -136,7 +136,7 @@ class Tracker:
 			roi: extracted roi.
 			loc_p: list, location params [cx, cy, w, h] in roi space
 		Returns:
-			conf: int, sum of values with the region specified by loc_p
+			conf: int, sum of values within/without the region specified by loc_p
 	
 		"""
 		x,y,w,h = loc_p
@@ -154,6 +154,32 @@ class Tracker:
 		cur_loc = [i+j for i,j in zip(las_loc, aff_param)]
 		return cur_loc
 
+# Experimenting.
+class TrackerContour(object):
+	# Working code
+	from skimage import measure
+	def find_contour(self, img):
+		for level in np.arange(0.1, 1.5, 0.2):
+			print(level, 'level')
+			contours = measure.find_contours(img, level, fully_connected='high')
+			num_c = len(contours)
+			print('Number of contours: ', num_c)
+			if num_c >= 1:
+				target = contours[0]
+				print('x max x min, y max y min')
+				xmax, xmin, ymax, ymin = target[:, 0].max(), target[:, 0].min(), target[:, 1].max(), target[:, 1].min()
+				w = int((xmax - xmin) / 2)
+				h = int((ymax - ymin) / 2)
+				cx = int(xmin + w)
+				cy = int(ymin + h)
+				break
+		return cx, cy, 3*w, 3*h
+
+	def predict_location(self, pre_M, rz_factor, img, roi_size=224):
+		contour_loc_in_roi =  self.find_contour(img)
+		
+		
+
 
 class TrackerVanilla(Tracker):
 	"""Vanilla tracker
@@ -167,7 +193,14 @@ class TrackerVanilla(Tracker):
 		for most cases of car tracking.
 
 	"""
+	__doc__ = Tracker.__doc__ + __doc__
 	def __init__(self, init_location):
+		"""
+		Args:
+			init_location: list, [tlx, tly, w, h], target location
+				in the first frame.
+		"""
+
 		super(TrackerVanilla, self).__init__(init_location)
 		self._update_params()
 
@@ -176,8 +209,8 @@ class TrackerVanilla(Tracker):
 		self.params['aff_sig'] = [10, 10, 0.05, 0.05]
 		self.params['particle_scales'] = np.arange(0.1, 5., 0.5)       
 
-	# Tested
-	def draw_particles(self):
+
+	def _draw_particles(self, rz_factor):
 		"""
 		The covariance matrix has only 4 degrees of freedom,
 		specified by vertical, horizontal translation of the central
@@ -187,46 +220,61 @@ class TrackerVanilla(Tracker):
 		object zoom in/out, object rotaion. Should be sufficient 
 		for most cases of car tracking.
 
+		Args: 
+			rz_factor: float, factor of roi space and image space transformation.
+
 		"""
 		# Define degrees of freedom 
 		dof = len(self.params['aff_sig'])
 
+		# Define actual particles number
+		p_num = self.params['p_num'] * (1 + len(self.params['particle_scales']))
+
 		# Construct an p_num*6 size matrix with with each 
 		# column repersents one particle
-
-		#aff_params_M = np.kron(np.ones((self.params['p_num'],1)), np.array(aff_params))
-
 		# First onstruct a p_num*dof size normal distribution with 
 		# mean 0 and sigma 1
-		rand_norml_M = np.array([np.random.standard_normal(dof) for _ in range(self.params['p_num'])])
+		rand_norml_M = np.array([np.random.standard_normal(dof) for _ in range(p_num)])
 
 		# Then construct a affine sigma matrix
-		aff_sig_M = np.kron(np.ones((self.params['p_num'], 1)), self.params['aff_sig'])
+		aff_sig_M = np.kron(np.ones((p_num, 1)), self.params['aff_sig'])
 
 		# Update particles 
 		aff_params_M = rand_norml_M * aff_sig_M
 
-		tmp = np.copy(aff_params_M)
-		for s in range(len(self.params['particle_scales'])):#, 1.4, 1.6, 1.8, 2.]:
-			scale_M = np.copy(tmp)
-			aff_params_M = np.vstack((aff_params_M, scale_M))
+		# Assign duplicate particles with different w/h `particle_scales`
+		idx = self.params['p_num']
+		for s in self.params['particle_scales']:
+			aff_params_M[idx: idx+idx, 2] *= s
+			aff_params_M[idx: idx+idx, 3] *= s
+			idx += idx
+
+		aff_params_M[:, 2] *= rz_factor
+		aff_params_M[:, 3] *= rz_factor
 		self.aff_params_M = aff_params_M
-		return aff_params_M
+
 
 
 	def predict_location(self, pre_M, gt_last, rz_factor, img, roi_size=224):
 		"""
 		Predict location for each particle. It is calculated by
 		1. compute the confidence of the i-th candidate, which is 
-			the summation of all the heatmap values within the candidate region.
+			the summation of all the heatmap values within the candidate region
+			over values outside of the candidate region.
 		2. the candidate with the highest confidence value is predicted as target.
 
 		Args:
 			pre_M: (224,224) array, predicted heat map.
 			gt_last: [tlx, tly, w, h], location of the last frame.
-			rz_factor: >1 int, scalling factor, pixel in roi / pixel in img.
-			img: image array, used for put into Q
+			rz_factor: >1 int, scalling factor, object's number of pixels 
+				in roi / pixels in img space.
+			img: image array.
+		Returns:
+			pre_location: list, [tlx, tly, w, h] the predicted location.
 		"""
+		# Draw particles by generating random affine paramters
+		self._draw_particles(rz_factor)
+
 		# transform self.aff_params_M to location_M with each column 
 		# repersent [cx, cy, w, h] in the pre_M heat map
 		loc_M = np.zeros(self.aff_params_M.shape)
@@ -236,23 +284,9 @@ class TrackerVanilla(Tracker):
 		loc_M[:, 1] = cy
 		loc_M[:, 2] = rz_factor * w 
 		loc_M[:, 3] = rz_factor * h
-		self.aff_params_M[:, 2] *= rz_factor
-		self.aff_params_M[:, 3] *= rz_factor
-        
-		idx = self.params['p_num']
-		for s in self.params['particle_scales']:
-			#loc_M[idx: idx+idx, 2] *= s
-			#loc_M[idx: idx+idx, 3] *= s
-			self.aff_params_M[idx: idx+idx, 2] *= s
-			self.aff_params_M[idx: idx+idx, 3] *= s
-			idx += idx
 
 		loc_M += self.aff_params_M
-
-
 		loc_M = loc_M.astype(np.int)
-
-		assert pre_M.shape == (224,224)
 
 		# Compute conf for each particle 
 		conf_lsit = []
@@ -274,6 +308,7 @@ class TrackerVanilla(Tracker):
 		best_aff =  self.aff_params_M[idx]
 		self.pre_location = self.aff2loc(gt_last, best_aff, rz_factor)
 		self.pre_location = [int(i) for i in self.pre_location]
+
 		# Stack into records queue
 		self.loc_q.put(self.pre_location)
 		self.conf_q.put(self.cur_best_conf)

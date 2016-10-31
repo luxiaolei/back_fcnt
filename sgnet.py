@@ -9,40 +9,42 @@ from utils import variable_on_cpu, variable_with_weight_decay
 
 
 class SGNet:
-
-	def __init__(self, scope, conv_tensor, sel_idx):
+	"""
+	Network structure is as follow:
+	A vgg's either conv4_3 or conv5_v3 layer is passed to 
+	the first additional convolutional layer which has convolutional 
+	kernels of size 9×9 and outputs 36 feature maps as the 
+	input to the next layer. 
+	The second additional convolutional layer has kernels of size 5 × 5
+	and outputs the foreground heat map of the input image.
+	ReLU is chosen as the nonlinearity for the first layer.
+	"""
+	def __init__(self, scope, conv_tensor):
 		"""
-		Base calss for SGNet, defines the network structure
+		Args:
+			scope: String, name of the network.
+			conv_tensor: tf.Tensor, either vgg.conv4_3 or vgg.conv5_3
+				with shape [batch_size, 224, 224, 512]
 		"""
 		self.scope = scope
 		self.params = {'wd': 0.05} # L2 regulization coefficien
 		
 		self.variables = []
 		with tf.variable_scope(scope) as scope:
-			self.pre_M = self._build_graph(conv_tensor, sel_idx)
+			self.pre_M = self._build_graph(conv_tensors)
 			self.gt_M = tf.placeholder(dtype=tf.float32, shape=(None,224,224),name='gt_M')
 
 
-	def _build_graph(self, conv_tensor, sel_idx):
+	def _build_graph(self, conv_tensors):
 		"""
-		Define Structure. 
-		The first additional convolutional
-		layer has convolutional kernels of size 9×9 and outputs
-		36 feature maps as the input to the next layer. The second
-		additional convolutional layer has kernels of size 5 × 5
-		and outputs the foreground heat map of the input image.
-		ReLU is chosen as the nonlinearity for these two layers.
-
-		Args:
-		    vgg_conv_shape: 
-		Returns:
-		    conv2: 
+		Define network's structure. And returns
+		the predicted heatmap which is a [batch_size, 224, 224, 1] tensor.
 		"""
 		self.variables = []
 		self.kernel_weights = []
-		sel_num = 512#len(sel_idx)
+		sel_num = 512
 		
-		self.input_maps = conv_tensor#tf.pack([conv_tensor[...,i] for i in sel_idx], axis=-1)        
+		self.input_maps = conv_tensor        
 		with tf.name_scope('conv1') as scope:
 			kernel = tf.Variable(tf.truncated_normal([9,9,sel_num,36], dtype=tf.float32,stddev=1e-1), name='weights')
 
@@ -69,16 +71,9 @@ class SGNet:
 
 	def loss(self):
 		"""Returns Losses for the current network.
-
-		Args:
-		    gt_M: np.ndarry, ground truth heat map.
 		Returns:
-		    Loss: 
+		    Loss: tf.Scalar tensor.
 		"""
-		# Assertion
-		#assert isinstance(gt_M, np.ndarray)
-		#assert len(gt_M.shape) == 2
-		#assert len(self.pre_M.get_shape().as_list()) == 2
 
 		with tf.name_scope(self.scope) as scope:
 			beta = tf.constant(self.params['wd'], name='beta')
@@ -88,34 +83,56 @@ class SGNet:
 			total_loss = loss_rms + loss_wd
 		return total_loss
 
-		@classmethod
-		def eadge_RP():
-			"""
-			This method propose a series of ROI along eadges
-			for a given frame. This should be called when particle 
-			confidence below a critical value, which possibly accounts
-			for object re-appearance.
-			"""
-			pass
+	@classmethod
+	def eadge_RP():
+		"""
+		This method propose a series of ROI along eadges
+		for a given frame. This should be called when particle 
+		confidence below a critical value, which possibly accounts
+		for object re-appearance.
+		"""
+		pass
 
 
 
 class GNet(SGNet):
-	def __init__(self, scope, conv_tensor, sel_idx):
+	"""
+	A GNet model recieves vgg's conv5_3 layer as
+	input tensor. It response for capturing general
+	features.
+	"""
+	__doc__ = SGNet.__doc__ + __doc__
+	def __init__(self, scope, conv_tensor):
 		"""
-		Fixed params once trained in the first frame
+		Register Network to current tf.Graph. 
+		Args:
+			scope: String, name of the network.
+			conv_tensor: tf.Tensor, a normalized and resized
+				vgg.conv5_3 with shape [batch_size, 224, 224, 512]
 		"""
-		super(GNet, self).__init__(scope, conv_tensor, sel_idx)
+		super(GNet, self).__init__(scope, conv_tensor)
 
 
 
 class SNet(SGNet):
-	def __init__(self, scope, conv_tensor, sel_idx):
+	"""
+	A SNet model recieves vgg's conv4_3 layer as
+	input tensor. It response for capturing specific
+	features.
+	"""
+	__doc__ = SGNet.__doc__ + __doc__
+	def __init__(self, scope, conv_tensor):
 		"""
-		Initialized in the first frame
+		Register Network to current tf.Graph. 
+		Args:
+			scope: String, name of the network.
+			conv_tensor: tf.Tensor, va normalized and resized
+				vgg.conv4_3 with shape [batch_size, 224, 224, 512]
+		
 		"""
-		super(SNet, self).__init__(scope, conv_tensor, sel_idx)
+		super(SNet, self).__init__(scope, conv_tensor)
 
+	# TODO, check contribution.
 	def adaptive_finetune(self, sess, gt_M, fd_s_adp, lr=1e-6):
 		"""Finetune SNet with best pre_M predicetd by gNet.
 		
@@ -130,7 +147,7 @@ class SNet(SGNet):
 			loss_, _ = sess.run([train_op, loss], feed_dict = feed_dict_s)
 			print('loss: ', loss_)
 
-
+	# TODO, test!
 	def descrimtive_finetune(self, sess, conv4_3_t0, sgt_M, conv4_3_t, pre_M_g, phi):
 		# Type and shape check!
 		# reshape pre_M_g 

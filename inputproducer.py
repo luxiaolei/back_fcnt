@@ -12,10 +12,17 @@ from utils import gauss2d
 class InputProducer:
 	def __init__(self, imgs_path, gt_path, live=False):
 		"""
-
+		Class for handle input images. 
+		
+		Args:
+			imgs_path: String, directory for specifying the path of images.
+			gt_path: String, filename of groundtruth file, which contains target 
+				bounding box info in each line.
+			live: bool, indicator for live video # TODO, implement.
+	
 		"""
 		self.imgs_path_list = [os.path.join(imgs_path, fn) for fn in sorted(os.listdir(imgs_path))]
-		self.gts_list = self.gen_gts(gt_path)
+		self.gts_list = self._gen_gts(gt_path)
 		self.gen_img = self.get_image()
 
 		self.roi_params = {
@@ -25,6 +32,13 @@ class InputProducer:
 		}
 
 	def get_image(self):
+		"""Generator for retrieve images and groundtruth bbox.
+		Yields:
+			img: np.ndarray with shape [240, 320, 3]
+			gt: list, specifying location of interested target.
+				[tlx, tly, w, h]
+			idx: int, index of current image.
+		"""
 		idx = -1
 		for img_path, gt in zip(self.imgs_path_list, self.gts_list):
 			img = imread(img_path, mode='RGB')
@@ -43,10 +57,16 @@ class InputProducer:
 			yield img, gt, idx
 
 
-	def gen_gts(self, gt_path):
+	def _gen_gts(self, gt_path):
 		"""
+		Parse location info from ground truth file.
 		Each row in the ground-truth files represents the bounding box 
 		of the target in that frame. (tl_x, tl_y, box-width, box-height)
+		
+		Args:
+			gt_path: string.
+		Returns:
+			gts_list: a nested list.
 		"""
 		f = open(gt_path, 'r')
 		lines = f.readlines()
@@ -60,12 +80,17 @@ class InputProducer:
 		return gts_list
 
 	def extract_roi(self, img, gt):
-		"""Extract ROI from img with target centered.
+		"""Extract ROI from img with target region centered.
 
+		Args:
+			img: np.ndarray, origin image.
+			gt: list, locations for top-left x, top-left y, width, height.
 		Returns:
 		    roi: tensor,
-		    roi_pos: list of params for roi_pos, [tlx, tly, h, w]
-
+		    roi_pos: list of params for roi_pos, [tlx, tly, w, h].
+			resize_factor: float, translational scalling factor from 
+				original image space to roi space. 
+				>1 for enlarger, <1 for ensmaller.
 		"""
 		roi_size  = self.roi_params['roi_size']
 		assert max(gt[2:]) <= roi_size
@@ -94,18 +119,17 @@ class InputProducer:
 		return roi_resized, [new_x, new_y, gt[2], gt[3]], resize_factor
 
 
-	def gen_mask(self, fea_sz):
+	def gen_mask(self, fea_sz=(224,224)):
 		"""
-		Generates 2D guassian masked convas with shape same as 
+		Generates a 2D guassian masked convas with shape same as 
 		fea_sz. This method should only called on the first frame.
 
 		Args:
-			img_sz: input image size.
-			fea_sz: feaure size, to be identical to the 
+			fea_sz: 2 elements tuple, to be identical with the 
 				Output of sel-CNN net.
 		Returns:
-			convas: fea_sz shape with 1 channel. The central region is an 
-				2D gaussian.
+			convas: np.ndarray, fea_sz shape with 1 channel. The central 
+				region is an 2D gaussian.
 		"""
 		im_sz = self.first_img.shape
 		x, y, w, h = self.first_gt
@@ -145,15 +169,33 @@ class InputProducer:
 		convas, _, _  = self.extract_roi(convas, self.first_gt)
 		#print(convas.shape)
 		convas = imresize(convas[...,0], fea_sz[:2], interp='bicubic')
-		#print(convas.max(), 'max convas')
 
 		# Swap back, and normalize
 		convas = convas / convas.max()
-		#convas = np.transpose(convas)
 
-		return convas#[..., np.newaxis]
+		return convas
 
 	def gen_batches(self, img, gt, n_samples=5000, batch_sz=10, pos_ratio=0.7, scale_factors=None):
+		""" 
+		Returns batched trainning examples, with which's target location and 
+		width/height ratio are randomly distored.
+		
+		Args:
+			img: np.ndarry with shape (240, 320, 3)
+			gt: list, [tlx, tly, w, h] location for target.
+			n_samples: int, total number of samples would like to generate.
+			batch_sz: int, number of examples in a batch. 
+			pos_ratio: float, in range (0, 1], portion of postitive samples
+				in total samples.
+			scale_factors: list, specifying scale factors when extracting target
+				from image in the process of generating random postive samples. 
+		Returns:
+			sample_batches: list of roi batches. with each roi batch has shape
+				[batch_size, 224, 224, 3].
+			target_batches: list of target batches. with each target batch jas shape
+				[batch_size, 224, 224, 3].
+		"""
+
 		# Gen n_pos number of scaled samples 
 		n_pos = int(n_samples/pos_ratio)
 		if scale_factors is None: scale_factors = np.arange(0.2, 5., 0.5)
@@ -168,12 +210,11 @@ class InputProducer:
 			targets += [gt_M]
 
 		# Gen negative samples with random scale factor
-
 		gt_M_neg = np.zeros((224,224), dtype=np.float32)
 		for _ in range(n_samples - n_pos):
 			lb, up = scale_factors[0], scale_factors[-1]
 			self.roi_params['roi_scale'] = np.random.uniform(lb, up)
-			roi = gen_neg_samples(img, gt)
+			roi = self._gen_neg_samples(img, gt)
 			samples += [roi]
 			targets += [gt_M_neg]
 
@@ -187,13 +228,20 @@ class InputProducer:
 		target_batches = [targets[i:i+batch_sz] for i in range(len(targets)) if i % batch_sz==0]
 		return sample_batches, target_batches
 
-	def gen_neg_samples(self, img, gt_1):
+	def _gen_neg_samples(self, img, gt_1):
+		"""
+		Private method for generating negative samples,
+		i.e., randomly extract a non-target region from image.
 
-		delta = 30
-		
-		#x,y,w,h = loc
+		Args:
+			img: np.ndarray. 3D array
+			gt_1: list, groundtruth for the target to avoid.
+		Returns:
+			roi_rand: np.ndarry, same shape as img. genrated negative sample.
+		"""
+
+		delta = 30 
 		img = img.copy()
-		#img[y-int(0.5*h): y+int(0.5*h), x-int(0.5*w):x+int(0.5*w)] = 0
 		w, h = gt_1[2:]
 		tl_x, tl_y = gt_1[:2]
 		tr_x, tr_y = tl_x + w, tl_y 
@@ -201,107 +249,11 @@ class InputProducer:
 		dr_x, dr_y = tl_x + w, tl_y +h
 		img[tl_y:dr_y+delta,tl_x:dr_x+delta] = img.mean()
 		
-		# randomly extract an arear same with gt
+		# randomly extract an arear specified by gt_1
 		x = np.random.randint(0, 224-w)
 		y = np.random.randint(0, 224-h)
 		roi_rand,_,_ = self.extract_roi(img, [y,x, w,h])
 		return roi_rand
-
-	# Deprecated method.
-	def porcess_img(img):
-		"""
-		Porcessing image required by vgg16
-		Returns:
-		image of shape [224, 224, 3]
-		[1, height, width, depth]
-		"""
-		# load image
-		img = img / 255.0
-		assert (0 <= img).all() and (img <= 1.0).all()
-
-		# conert to color image if its a grey one
-		if len(img.shape) < 3:
-			img = skimage.color.gray2rgb(img)
-		assert len(img.shape) == 3
-
-		# crop image from center
-		short_edge = min(img.shape[:2])
-		yy = int((img.shape[0] - short_edge) / 2)
-		xx = int((img.shape[1] - short_edge) / 2)
-		crop_img = img[yy : yy + short_edge, xx : xx + short_edge]
-
-		# resize to 224, 224
-		resized_img = skimage.transform.resize(crop_img, (224, 224))
-		return resized_img.reshape((1, 224, 224, 3))
-
-	# Deprecated method.
-	def img_porcess(img):
-		img = img.astype(float)
-		# conert to color image if its a grey one
-		if len(img.shape) < 3:
-			img = skimage.color.gray2rgb(img)
-
-		# Swap x,y order and subtract mean value
-		mean_pix = [123.68, 116.779, 103.939] # BGR
-		img = np.transpose(img, [1,0,2])
-		img[:, :, 0] -= mean_pix[0]
-		img[:, :, 1] -= mean_pix[1]
-		img[:, :, 2] -= mean_pix[2]
-		return img.reshape((1, 224, 224, 3))
-
-	# Deprecated method!
-	def extract_roi_deprecated(self, img, gt):
-		"""
-		Extract Regigon of Interest 
-		"""
-		w, h = gt[2:]
-		dia = (w**2 + h**2)**0.5
-		scale = [dia / w, dia / h]
-		r_w_scale = [self.roi_params['roi_scale']*scale[0],
-					 self.roi_params['roi_scale']*scale[1]]
-
-		#print(img.max(), 'origin max')
-		h, w = img.shape[:2]
-		win_w = gt[2]
-		win_h = gt[3]
-		win_lt_x = gt[0]
-		win_lt_y = gt[1]
-
-		# Center location in img
-		win_cx = np.round(win_lt_x + win_w / 2 + self.roi_params['l_off'][0])
-		win_cy = np.round(win_lt_y + win_h / 2 + self.roi_params['l_off'][1])
-
-		# Scales the width and height for roi 
-		roi_w = r_w_scale[0] * win_w
-		roi_h = r_w_scale[1] * win_h
-
-		# Center location in roi
-		x1 = win_cx - np.round(roi_w / 2)
-		y1 = win_cy - np.round(roi_h / 2)
-		x2 = win_cx + np.round(roi_w / 2)
-		y2 = win_cy + np.round(roi_h / 2)
-
-		# Out of window detection
-		clip = min([x1, y1 ,h-y2 , w-x2])
-		pad = 0
-		if clip<=0:
-		    pad = int(abs(clip)+1)
-		    print(clip)
-		    img = np.lib.pad(img, [pad, pad], mode='constant', constant_values=[0, 0])
-		    x1 = x1 + pad
-		    x2 = x2 + pad
-		    y1 = y1 + pad
-		    y2 = y2 + pad
-
-		# Resize bicubicly 
-		#print(img[y1-1:y2, x1-1:x2, :].max(), 'before bicubic resize')
-		roi =  imresize(img[y1-1:y2, x1-1:x2, :], [self.roi_params['roi_size'], self.roi_params['roi_size']], interp='bicubic')
-		#print(roi.max(), 'after bicubic resize')
-		preimg = np.zeros(img.shape[:2])
-		roi_pos = [x1, y1, x2-x1+1, y2-y1+1]
-		#print(roi.max(), 'roi max')
-		#roi = roi.astype(np.float32)
-		return roi, roi_pos, preimg, pad
 
 
 
