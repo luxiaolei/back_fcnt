@@ -17,16 +17,14 @@ import sys
 import os
 import time
 
-tf.app.flags.DEFINE_integer('iter_epoch_sg', 1,
+tf.app.flags.DEFINE_integer('iter_epoch_sg', 15,
                           """Number of epoches for trainning"""
                           """SGnet works""")
-tf.app.flags.DEFINE_integer('n_samples_per_batch', 200,
+tf.app.flags.DEFINE_integer('n_samples_per_batch', 50000,
                           """Number of samples per batch for trainning"""
                           """SGnet works""")
 tf.app.flags.DEFINE_integer('iter_max', 1349,
 							"""Max iter times through imgs""")
-tf.app.flags.DEFINE_integer('S_adp_steps', 20,
-							"""Steps to finetue Snet adaptively""")
 FLAGS = tf.app.flags.FLAGS
 
 ## Define varies pathes
@@ -35,6 +33,9 @@ PRE_ROOT = os.path.join(DATA_ROOT, 'img_loc')
 IMG_PATH = os.path.join(DATA_ROOT, 'img')
 GT_PATH = os.path.join(DATA_ROOT, 'groundtruth_rect.txt')
 VGG_WEIGHTS_PATH = 'vgg16_weights.npz'
+
+if not os.path.isdir(PRE_ROOT):
+    os.mkdir(PRE_ROOT)
 
 
 def init_vgg(roi_t0):
