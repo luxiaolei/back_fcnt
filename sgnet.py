@@ -31,11 +31,11 @@ class SGNet:
 		
 		self.variables = []
 		with tf.variable_scope(scope) as scope:
-			self.pre_M = self._build_graph(conv_tensors)
+			self.pre_M = self._build_graph(conv_tensor)
 			self.gt_M = tf.placeholder(dtype=tf.float32, shape=(None,224,224),name='gt_M')
 
 
-	def _build_graph(self, conv_tensors):
+	def _build_graph(self, conv_tensor):
 		"""
 		Define network's structure. And returns
 		the predicted heatmap which is a [batch_size, 224, 224, 1] tensor.

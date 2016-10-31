@@ -17,11 +17,12 @@ import sys
 import os
 import time
 
-tf.app.flags.DEFINE_integer('iter_step_sg', 50,
-                          """Number of steps for trainning"""
+tf.app.flags.DEFINE_integer('iter_epoch_sg', 1,
+                          """Number of epoches for trainning"""
                           """SGnet works""")
-tf.app.flags.DEFINE_integer('sel_num', 354,
-                          """Number of feature maps selected.""")
+tf.app.flags.DEFINE_integer('n_samples_per_batch', 200,
+                          """Number of samples per batch for trainning"""
+                          """SGnet works""")
 tf.app.flags.DEFINE_integer('iter_max', 1349,
 							"""Max iter times through imgs""")
 tf.app.flags.DEFINE_integer('S_adp_steps', 20,
@@ -59,7 +60,7 @@ def init_vgg(roi_t0):
 
 
 
-def train_SGNets(sess, vgg, snet, gnet, inputProducer):
+def train_SGNets(sess, img, gt, vgg, snet, gnet, inputProducer):
 	"""
 	Train SGnets' variables by minimizing a composite L2 regression losses.
 
@@ -87,11 +88,10 @@ def train_SGNets(sess, vgg, snet, gnet, inputProducer):
 	train_op = optimizer.minimize(loss, var_list= vars_train, global_step=global_step)
 	sess.run(tf.initialize_variables(snet.variables + gnet.variables + [global_step]))
 
-	num_epoch = 10
 	losses = []
-	sample_batches, target_batches = inputProducer.gen_batches(img, gt)
-	print('Start training the SGNets........ for %s epochs'%num_epoch)
-	for ep in range(num_epoch):
+	sample_batches, target_batches = inputProducer.gen_batches(img, gt, n_samples=FLAGS.n_samples_per_batch, batch_sz=10, pos_ratio=0.7, scale_factors=np.arange(0.2, 5., 0.5))
+	print('Start training the SGNets........ for %s epoches'%FLAGS.iter_epoch_sg)
+	for ep in range(FLAGS.iter_epoch_sg):
 		step = 0
 		print('Total samples in each epoch: ', len(sample_batches))
 		for roi, target in zip(sample_batches, target_batches):
@@ -125,7 +125,7 @@ def main(args):
 	# Instainate SGNets with conv tensors and training.
 	snet = SNet('SNet', vgg.conv4_3_norm)
 	gnet = GNet('GNet', vgg.conv5_3_norm)
-	train_SGNets(sess, vgg, snet, gnet, inputProducer)
+	train_SGNets(sess, img, gt, vgg, snet, gnet, inputProducer)
 
 	
 	## Instainate a tracker object, set apoproaite initial parameters.
