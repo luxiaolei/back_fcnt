@@ -17,10 +17,10 @@ import sys
 import os
 import time
 
-tf.app.flags.DEFINE_integer('iter_epoch_sg', 15,
+tf.app.flags.DEFINE_integer('iter_epoch_sg', 5,
                           """Number of epoches for trainning"""
                           """SGnet works""")
-tf.app.flags.DEFINE_integer('n_samples_per_batch', 50000,
+tf.app.flags.DEFINE_integer('n_samples_per_batch', 5000,
                           """Number of samples per batch for trainning"""
                           """SGnet works""")
 tf.app.flags.DEFINE_integer('iter_max', 1349,
@@ -37,6 +37,19 @@ VGG_WEIGHTS_PATH = 'vgg16_weights.npz'
 if not os.path.isdir(PRE_ROOT):
     os.mkdir(PRE_ROOT)
 
+
+TB_SUMMARY = os.path.join('tb_summary', FLAGS.model_name)
+if not os.path.isdir('tb_summary'):
+    os.mkdir('tb_summary')
+if not os.path.isdir(TB_SUMMARY):
+    os.mkdir(TB_SUMMARY)
+
+CKPT_PATH = 'checkpoint'
+if not os.path.isdir(CKPT_PATH):
+    os.mkdir(CKPT_PATH)
+
+model_name = FLAGS.model_name+'.ckpt'
+CKPT_MODEL = os.path.join(CKPT_PATH, model_name)
 
 def init_vgg(roi_t0):
 	"""
@@ -74,6 +87,9 @@ def train_SGNets(sess, img, gt, vgg, snet, gnet, inputProducer):
 	"""
 
 	loss = gnet.loss() + snet.loss()
+	tf.scalar_summary('loss', total_loss)
+	writer = tf.train.SummaryWriter(TB_SUMMARY, sess.graph)
+
 	vars_train = vgg.variables + gnet.variables + snet.variables
 
 	# Backprop using SGD and updates vgg variables and sgnets variables
@@ -85,13 +101,16 @@ def train_SGNets(sess, img, gt, vgg, snet, gnet, inputProducer):
 			0.9, # Decay rate 
 			name='sg_lr')
 
+	tf.scalar_summary('Learning rate', lr_exp)
+	merged = tf.merge_all_summaries()
 	optimizer = tf.train.GradientDescentOptimizer(lr_exp)
 	train_op = optimizer.minimize(loss, var_list= vars_train, global_step=global_step)
 	sess.run(tf.initialize_variables(snet.variables + gnet.variables + [global_step]))
 
-	losses = []
+
 	sample_batches, target_batches = inputProducer.gen_batches(img, gt, n_samples=FLAGS.n_samples_per_batch, batch_sz=10, pos_ratio=0.7, scale_factors=np.arange(0.2, 5., 0.5))
 	print('Start training the SGNets........ for %s epoches'%FLAGS.iter_epoch_sg)
+	saver = tf.train.Saver()
 	for ep in range(FLAGS.iter_epoch_sg):
 		step = 0
 		print('Total samples in each epoch: ', len(sample_batches))
@@ -99,11 +118,20 @@ def train_SGNets(sess, img, gt, vgg, snet, gnet, inputProducer):
 			t = time.time()
 			fd = {vgg.imgs: roi, gnet.gt_M: target, snet.gt_M: target}
 			pre_M_g, pre_M_s, l, _, lr = sess.run([gnet.pre_M, snet.pre_M, loss, train_op, lr_exp], feed_dict=fd)
-			losses += [l]
+
+            if step % 20 == 0:
+                summary_img_g = tf.image_summary('pre_M', pre_M_g)
+				summary_img_s = tf.image_summary('pre_M', pre_M_s)
+                summary, img_summary_g, img_summary_s = sess.run([merged, summary_img_g, summary_img_s], feed_dict=fd)
+                
+                writer.add_summary(summary, global_step=step)
+                writer.add_summary(img_summary_g, global_step=step)
+				writer.add_summary(img_summary_s, global_step=step)
 			
 			if step % 50 == 0:
 				print('Epoch: ', ep+1, 'Step: ', (ep+1)*step, 'Loss : %.2f'%l, \
 					'Speed: %2.f second/batch'%(time.time()-t), 'Lr: ', lr)
+				saver.save(sess, CKPT_MODEL)
 			step += 1
 
 
