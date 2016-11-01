@@ -49,6 +49,47 @@ def variable_with_weight_decay(scope, name, shape, stddev=1e-3, wd=None):
         tf.add_to_collection('losses', weight_decay)
     return variable
 
+def select_fms(sess, conv_tensor, gt, rz_factor, fd, sel_num):
+    """
+    Select feature maps of vg conv layers, by computing
+    within/overall score of target region inside a map
+
+    Args:
+        sess: tf.Session object.
+        conv_tensor: tf.Tensor, shoudld be either conv4_3 or conv5_3 resized and normalized layer.
+        gt: [x,y,w,h], groundtruth of target in original image.
+        rz_factor: float, size in original img * rz_factor = size in extracted roi img.
+        fd: dict, feed_dict for feeding a vgg network.
+        sel_num: int, number of slected maps.
+
+    Returns:
+        idx: list with length sel_num
+    """
+    assert isinstance(conv_tensor,tf.Tensor)
+    assert isinstance(conv_tensor,tf.Tensor)
+    def compute_score(roi, gt, rz_factor):
+        """Helper func for computing confidence"""
+        roi = np.copy(roi)
+        _,_,w,h = gt
+        w_half = int(0.5*w*rz_factor)# resize_factor
+        h_half = int(0.5*h*rz_factor)
+        c = 224/2
+        conf_i = roi[c-h_half:c+h_half, c-w_half:c+w_half].sum()
+        conf_u = roi.sum()
+        if conf_u == 0:
+            return 0.0
+        else:
+            return conf_i / conf_u
+
+    # Get values of conv layer
+    conv_arr = sess.run(conv_tensor, feed_dict=fd)
+
+    # Compute score
+    scores = []
+    for idx in range(512):
+        scores += [compute_score(conv_arr[0,...,idx], gt, rz_factor)]
+    selected_idx = sorted(range(len(scores)), key=lambda i: scores[i])[-sel_num:]
+    return selected_idx
 
 # draw on img
 def img_with_bbox(img_origin, gt_1, c=1):  
@@ -85,7 +126,7 @@ def img_with_bbox(img_origin, gt_1, c=1):
     img[rr4, cc4, :] = c
     return img
 
-def gauss2d(shape=(6,6),sigma=1000.):
+def gauss2d(shape=(6,6),sigma=1.):
     """
     2D gaussian mask - should give the same result as MATLAB's
     fspecial('gaussian',[shape],[sigma])
@@ -97,6 +138,7 @@ def gauss2d(shape=(6,6),sigma=1000.):
         h: a 2D gaussian with shape as `shape`.
     """
     # Implements 2D gaussian formula
+    sigma *= 1000
     m,n = [(ss-1.)/2. for ss in shape]
     y,x = np.ogrid[-m:m+1,-n:n+1]
     h = np.exp( -(x*x + y*y) / (2.*sigma*sigma) )

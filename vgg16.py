@@ -17,8 +17,8 @@ class Vgg16:
             self.fc_layers()
             self.probs = tf.nn.softmax(self.fc3l)
             
-            # Resize conv4_3 and conv5_3 to 224,224 size, and perform normalization
-            size_tensosr = tf.constant([224,224])
+            # Resize conv4_3 and conv5_3 to 28, 28 size, and perform normalization
+            size_tensosr = tf.constant([28,28])
             conv4_rz = tf.image.resize_images(self.conv4_3, size_tensosr)
             self.conv4_3_norm = conv4_rz #/ tf.reduce_max(conv4_rz) # TODO, causing ResourceAllocating error when backprop?
             conv5_rz = tf.image.resize_images(self.conv5_3, size_tensosr)

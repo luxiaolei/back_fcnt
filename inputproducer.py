@@ -43,7 +43,7 @@ class InputProducer:
 		for img_path, gt in zip(self.imgs_path_list, self.gts_list):
 			img = imread(img_path, mode='RGB')
 
-			assert min(img.shape[:2]) >= 224
+			assert min(img.shape[:2]) >= 28
 
 			# Gray to color. RES??
 			#if len(img.shape) < 3:
@@ -119,7 +119,7 @@ class InputProducer:
 		return roi_resized, [new_x, new_y, gt[2], gt[3]], resize_factor
 
 
-	def gen_mask(self, fea_sz=(224,224)):
+	def gen_mask(self, fea_sz=(28,28)):
 		"""
 		Generates a 2D guassian masked convas with shape same as 
 		fea_sz. This method should only called on the first frame.
@@ -191,9 +191,9 @@ class InputProducer:
 				from image in the process of generating random postive samples. 
 		Returns:
 			sample_batches: list of roi batches. with each roi batch has shape
-				[batch_size, 224, 224, 3].
+				[batch_size, 28, 28, 3].
 			target_batches: list of target batches. with each target batch jas shape
-				[batch_size, 224, 224, 3].
+				[batch_size, 28, 28, 3].
 		"""
 
 		# Gen n_pos number of scaled samples 
@@ -205,12 +205,12 @@ class InputProducer:
 			sf_idx = pos_idx % len(scale_factors)
 			self.roi_params['roi_scale'] = scale_factors[sf_idx]
 			roi, _, _ = self.extract_roi(img, gt)
-			gt_M = self.gen_mask((224,224)).astype(np.float32)
+			gt_M = self.gen_mask((28,28)).astype(np.float32)
 			samples += [roi]
 			targets += [gt_M]
 
 		# Gen negative samples with random scale factor
-		gt_M_neg = np.zeros((224,224), dtype=np.float32)
+		gt_M_neg = np.zeros((28,28), dtype=np.float32)
 		for _ in range(n_samples - n_pos):
 			lb, up = scale_factors[0], scale_factors[-1]
 			self.roi_params['roi_scale'] = np.random.uniform(lb, up)
@@ -250,8 +250,8 @@ class InputProducer:
 		img[tl_y:dr_y+delta,tl_x:dr_x+delta] = img.mean()
 		
 		# randomly extract an arear specified by gt_1
-		x = np.random.randint(0, 224-w)
-		y = np.random.randint(0, 224-h)
+		x = np.random.randint(0, 28-w)
+		y = np.random.randint(0, 28-h)
 		roi_rand,_,_ = self.extract_roi(img, [y,x, w,h])
 		return roi_rand
 
