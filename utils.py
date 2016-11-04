@@ -7,6 +7,9 @@ from skimage import draw
 from scipy.misc import imresize
 
 
+
+
+
 def variable_on_cpu(scope, name, shape, initializer):
     """Helper to create a Variable stored on CPU memory.
 

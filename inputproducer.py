@@ -258,4 +258,34 @@ class InputProducer:
 
 
 
+class LiveInput(InputProducer):
+	def __init__(self):
+		self.roi_params = {
+		'roi_size': 224, 
+		'roi_scale': 3,
+		'l_off': [0,0]
+		}
+		#self.cap = cv2.VideoCapture(0)
+	
+	def save_fist_roi_mean(self, img, gt):
+		x,y,w,h = gt
+		roi_mean = img[y:y+h, x:x+w].mean()
+		self.roi_mean = roi_mean
+		self.first_gt = gt
+		self.first_img = img
+		
+	def Ajust_brighteness(self, img, gt_last):
+		img = img.astype(np.float)
+		x,y,w,h = gt_last
+		print(h, w, 'h, w in ajust brighteness!')
+		roi_cur_mean = img[y:y+h, x:x+w].mean()
+		print(img[y:y+h, x:x+w].shape, 'shape of arear!')
+		print(np.ones([h, w, 3]).shape, 'shape of ones!')
 
+		img[y:y+h, x:x+w] += np.ones([h, w, 3])*int(self.roi_mean-roi_cur_mean)
+		img[img>255] = 255
+		return img
+			
+
+	
+	

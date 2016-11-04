@@ -1,330 +1,409 @@
 
-import numpy as np
-
-from queue import Queue
-from scipy.misc import imresize
 from operator import add
+from queue import Queue
 
+import numpy as np
+from scipy.misc import imresize
 
+import cv2
 
-
-class Tracker:
-	"""
-	Generic tracking model. A location is represented by an affine transformation (e.g., Xt−1), which warps the
-	coordinate system so that the target lies within the unit square. Particles representing possible target locations Xt, 
-	at time t are sampled according to P(Xt|Xt−1), which in this case is a diagonal-covariance Gaussian centered at Xt−1.
-	
-	Where:
-	Xt = (xt, yt, θt, st, αt, φt)
-	denote x, y translation, rotation angle, scale, aspect ratio, and skew direction at time t.
-
-	P(Xt|Xt−1) = N (Xt; Xt−1, Ψ)
-	where Ψ is a diagonal covariance matrix whose elements are the corresponding variances of affine parameters, assumes the variance of each affine parameter does not change over time
-
-	See 3.3.1 Dynamic model in http://www.cs.toronto.edu/~dross/ivt/RossLimLinYang_ijcv.pdf for reference
-
-	Particle filter calss"""
-	def __init__(self, init_location,):
-		self.conf_q = Queue(maxsize=99999)
-		self.loc_q = Queue(maxsize=99999)
-		self.img_q = Queue(maxsize=99999)
-		self.location = init_location
-		self.params = self._init_params(init_location)
-		print('i am new!')
-
-
-
-	def _init_params(self, init_location):
-		"""Initialize tracker's parameters"""
-
-		params = {'p_sz': 64, 'p_num': 20000, 'min_conf': 0.2, 
-				'mv_thr': 0.1, 'up_thr': 0.35, 'roi_scale': 2}
-		diag_s = np.ceil((init_location[2]**2 + init_location[3]**2)**0.5/7)
-		params['aff_sig'] = [diag_s, diag_s, 0.004, 0.0, 0.0, 0]
-		params['ratio'] = init_location[2] / params['p_sz']
-		
-		return params
-
-	def _qs_full(self):
-		if self.conf_q.full() and self.pre_M_q.full():
-			return True
-		else:
-			return False
-
-	def gen_best_records(self, inter_steps=20):
-		"""Returns the best records in last `inter_steps` steps."""
-		confs = [self.conf_q.get() for _ in range(inter_steps)]
-		imgs = [self.img_q.get() for _ in range(inter_steps)]
-		locs = [self.loc_q.get() for _ in range(inter_steps)]
-		idx = np.argmax(confs)
-		return imgs[idx], locs[idx]
-
-
-	def draw_particles(self):
-		"""
-		Generates particles according to 
-		P(Xt|Xt−1) = N (Xt; Xt−1, Ψ)
-
-		Args:
-			aff_params: affine parameters, see class doc string for 
-				specific element definition.
-				[cx, cy, w/p_sz, 0, h/w, 0] for 6 degrees of freendom
-				[tlx, tly, w, h] for 4 degrees of freedom.
-				.
-		Returns:
-			aff_params_M : self.p_num*dof size matrix,
-				where rows are updated randomly drawed affine 
-				params, columns repersent each particles. 
-		"""
-		pass
-
-
-
-	def predict_location(self, pre_M, gt_last, rz_factor, t):
-		"""
-		Predict location for each particle. It is calculated by
-		1. compute the confidence of the i-th candidate, which is 
-			the summation of all the heatmap values within the candidate region.
-		2. the candidate with the highest confidence value is predicted as target.
-
-		Args:
-			img_siz: tuple(image height, image width)
-			pre_M: predicted heat map
-			t: index of current frame
-		"""
-		pass
-
-
-	def get_most_conf_M(self):
-		"""Returns the most confidence heat maps."""
-
-		# Pull self.conf_records all out, and retrive 
-		# the most confident heat map. 
-
-		return updated_gt_M
-
-
-	def linear_prediction(self):
-		"""
-		Predicts current location linnearly according
-		to las two frames location. This may boost the 
-		robustnesss of obejct blocking.
-		"""
-		pass
-
-	def distracted(self):
-		"""Distracter detection."""
-
-		# up-sampling pre_M
-
-		# Compute confidence according to 
-		# S = with_in / with_out
-		conf_within = self.compute_conf(self.pre_M_resized, self.best_p_i_loc)
-		conf_all = np.sum(self.pre_M_resized)
-		distracter_score = conf_within / conf_all
-		print('The probability of been distracted is %s'%distracter_score)
-		if distracter_score > self.params['min_conf']:
-			return False
-		else:
-			return True
-			
-	@classmethod # Tested
-	def compute_conf(self, roi, roi_sum, loc_p):
-		"""Helper func for computing confidence.
-		
-		Args:
-			roi: extracted roi.
-			loc_p: list, location params [cx, cy, w, h] in roi space
-		Returns:
-			conf: int, sum of values within/without the region specified by loc_p
-	
-		"""
-		x,y,w,h = loc_p
-		conf = np.sum(roi[y-int(0.5*h): y+int(0.5*h), \
-					x-int(0.5*w):x+int(0.5*w)])
-		conf = conf / (roi_sum - conf) # within/all ratio
-		return conf
-
-	@classmethod
-	def aff2loc(self, las_loc, aff_param, rz_factor):
-		"""Convert affine params to location."""
-		assert len(aff_param)==4, 'This method only works for dof 4 aff space.'
-		# Space transformation, scalling and displacement
-		aff_param /= rz_factor 
-		cur_loc = [i+j for i,j in zip(las_loc, aff_param)]
-		return cur_loc
 
 # Experimenting.
 class TrackerContour(object):
-	# Working code
-	from skimage import measure
-	def find_contour(self, img):
-		for level in np.arange(0.1, 1.5, 0.2):
-			print(level, 'level')
-			contours = measure.find_contours(img, level, fully_connected='high')
-			num_c = len(contours)
-			print('Number of contours: ', num_c)
-			if num_c >= 1:
-				target = contours[0]
-				print('x max x min, y max y min')
-				xmax, xmin, ymax, ymin = target[:, 0].max(), target[:, 0].min(), target[:, 1].max(), target[:, 1].min()
-				w = int((xmax - xmin) / 2)
-				h = int((ymax - ymin) / 2)
-				cx = int(xmin + w)
-				cy = int(ymin + h)
-				break
-		return cx, cy, 3*w, 3*h
+    """
+    TrackerContour class make use of contours of predicted
+    heatmap, to produce the most confidence location. The heatmap
+    generated by SGNets contains levels of noise, In the process of 
+    gradually eliminating noisy pixels, one can find the most "persistence"
+    contours. 
+    """
+    def __init__(self):
+        self.conf_scores = []
+        self.arear_in_bbox = []
+        self.step = 0
 
-	def predict_location(self, pre_M, rz_factor, img, roi_size=224):
-		contour_loc_in_roi =  self.find_contour(img)
-		
-		
+    def _compute_score(self, loc_list, arear_list):		
+        """
+        Computes score of each contour
+
+        """
+        scores_dis = []
+        for loc in loc_list:
+            scores_dis += [sum([abs(x-x0) for x,x0 in zip(loc,self.last_pre_loc_roi)])]
+        scores_dis = np.array(scores_dis) / max(scores_dis)
+        arear_list = np.array(arear_list)/ max(arear_list)
+        scores = scores_dis / arear_list
+        best_idx = np.argmin(scores)
+        return loc_list[best_idx], best_idx, scores[best_idx]
+
+
+    def _roi_2_img_space_transform(self, loc_roi, rz_factor, gt_last):
+        """Returns a transformed location in image space."""
+        x,y,w,h = loc_roi
+        dx, dy = (x+(w/2)-112)/rz_factor, (y+(h/2)-112)/rz_factor
+        pre_loc = [gt_last[0]+dx, gt_last[1]+dy, w/rz_factor, h/rz_factor]
+        return [abs(int(i)) for i in pre_loc]		
+
+
+    def preporcess_heatmaps(self, pre_M_g, pre_M_s, resize=(224,224)):
+        """
+        Preporcessing heatmaps generated by SGNets,
+        returns a combined, resized, np.float32 type heatmap.
+
+        """
+        pre_M_g = imresize(pre_M_g, (224,224)).astype(np.float32)
+        pre_M_s = imresize(pre_M_s, (224,224)).astype(np.float32)
+        pre_M = (pre_M_g+pre_M_s)/(pre_M_g+pre_M_s).max()
+        return pre_M
+            
+
+    def predict_location(self,
+                        pre_M,
+                        gt_last,
+                        rz_factor,
+                        threshold=np.arange(0.3, 0.9, 0.05)):
+
+        arear_list, bbox_list = [], []
+        if self.step == 0:
+            pre_M[pre_M<(0.7)] = 0
+            cvuint8 = cv2.convertScaleAbs(pre_M)
+            img2, contours, hierarchy = cv2.findContours(cvuint8, 1, 2)
+            assert len(contours)>=1
+            for cnt in contours:
+                x,y,w,h = cv2.boundingRect(cnt)
+                bbox_list += [(x,y,w,h)]
+                arear_list += [cv2.contourArea(cnt)]
+            
+            # Find the best contour with a largest arear.
+            best_idx = np.argmax(arear_list)
+            pre_loc_roi = bbox_list[best_idx]
+            self.last_pre_loc_roi = pre_loc_roi
+
+            # Assumes the first frame always gives the most confident result.
+            self.conf_scores += [1] 
+        else:
+            for s in threshold:
+                pre_M[pre_M<s] = 0
+                cvuint8 = cv2.convertScaleAbs(pre_M)
+                img2, contours, hierarchy = cv2.findContours(cvuint8, 1, 2)
+                if len(contours) < 1: continue
+                for cnt in contours:
+                    x,y,w,h = cv2.boundingRect(cnt)
+                    if x+w >= 224 or y+h >224: continue
+                    if w/rz_factor>224 or h/rz_factor>224: continue
+                    bbox_list += [(x,y,w,h)]
+                    arear_list += [cv2.contourArea(cnt)]	
+            pre_loc_roi, idx, conf_score = self._compute_score(bbox_list, arear_list)
+            self.conf_scores += [conf_score]
+
+            self.last_pre_loc_roi = pre_loc_roi
+        
+        pre_loc_img = self._roi_2_img_space_transform(pre_loc_roi, rz_factor, gt_last)
+        self.arear_in_bbox += [pre_loc_img[2]*pre_loc_img[3]]
+        self.step += 1
+        return pre_loc_img
+            
+    
+    def find_contour(self, img):
+        for level in np.arange(0.1, 1.5, 0.2):
+            print(level, 'level')
+            contours = measure.find_contours(img, level, fully_connected='high')
+            num_c = len(contours)
+            print('Number of contours: ', num_c)
+            if num_c >= 1:
+                target = contours[0]
+                print('x max x min, y max y min')
+                xmax, xmin, ymax, ymin = target[:, 0].max(), target[:, 0].min(), target[:, 1].max(), target[:, 1].min()
+                w = int((xmax - xmin) / 2)
+                h = int((ymax - ymin) / 2)
+                cx = int(xmin + w)
+                cy = int(ymin + h)
+                break
+        return cx, cy, 3*w, 3*h
+
+
+        
+
+class Tracker:
+    """
+    Generic tracking model. A location is represented by an affine transformation (e.g., Xt−1), which warps the
+    coordinate system so that the target lies within the unit square. Particles representing possible target locations Xt, 
+    at time t are sampled according to P(Xt|Xt−1), which in this case is a diagonal-covariance Gaussian centered at Xt−1.
+    
+    Where:
+    Xt = (xt, yt, θt, st, αt, φt)
+    denote x, y translation, rotation angle, scale, aspect ratio, and skew direction at time t.
+
+    P(Xt|Xt−1) = N (Xt; Xt−1, Ψ)
+    where Ψ is a diagonal covariance matrix whose elements are the corresponding variances of affine parameters, assumes the variance of each affine parameter does not change over time
+
+    See 3.3.1 Dynamic model in http://www.cs.toronto.edu/~dross/ivt/RossLimLinYang_ijcv.pdf for reference
+
+    Particle filter calss"""
+    def __init__(self, init_location,):
+        self.conf_q = Queue(maxsize=99999)
+        self.loc_q = Queue(maxsize=99999)
+        self.img_q = Queue(maxsize=99999)
+        self.location = init_location
+        self.params = self._init_params(init_location)
+        print('i am new!')
+
+
+
+    def _init_params(self, init_location):
+        """Initialize tracker's parameters"""
+
+        params = {'p_sz': 64, 'p_num': 20000, 'min_conf': 0.2, 
+                'mv_thr': 0.1, 'up_thr': 0.35, 'roi_scale': 2}
+        diag_s = np.ceil((init_location[2]**2 + init_location[3]**2)**0.5/7)
+        params['aff_sig'] = [diag_s, diag_s, 0.004, 0.0, 0.0, 0]
+        params['ratio'] = init_location[2] / params['p_sz']
+        
+        return params
+
+    def _qs_full(self):
+        if self.conf_q.full() and self.pre_M_q.full():
+            return True
+        else:
+            return False
+
+    def gen_best_records(self, inter_steps=20):
+        """Returns the best records in last `inter_steps` steps."""
+        confs = [self.conf_q.get() for _ in range(inter_steps)]
+        imgs = [self.img_q.get() for _ in range(inter_steps)]
+        locs = [self.loc_q.get() for _ in range(inter_steps)]
+        idx = np.argmax(confs)
+        return imgs[idx], locs[idx]
+
+
+    def draw_particles(self):
+        """
+        Generates particles according to 
+        P(Xt|Xt−1) = N (Xt; Xt−1, Ψ)
+
+        Args:
+            aff_params: affine parameters, see class doc string for 
+                specific element definition.
+                [cx, cy, w/p_sz, 0, h/w, 0] for 6 degrees of freendom
+                [tlx, tly, w, h] for 4 degrees of freedom.
+                .
+        Returns:
+            aff_params_M : self.p_num*dof size matrix,
+                where rows are updated randomly drawed affine 
+                params, columns repersent each particles. 
+        """
+        pass
+
+
+
+    def predict_location(self, pre_M, gt_last, rz_factor, t):
+        """
+        Predict location for each particle. It is calculated by
+        1. compute the confidence of the i-th candidate, which is 
+            the summation of all the heatmap values within the candidate region.
+        2. the candidate with the highest confidence value is predicted as target.
+
+        Args:
+            img_siz: tuple(image height, image width)
+            pre_M: predicted heat map
+            t: index of current frame
+        """
+        pass
+
+
+    def get_most_conf_M(self):
+        """Returns the most confidence heat maps."""
+
+        # Pull self.conf_records all out, and retrive 
+        # the most confident heat map. 
+
+        return updated_gt_M
+
+
+    def linear_prediction(self):
+        """
+        Predicts current location linnearly according
+        to las two frames location. This may boost the 
+        robustnesss of obejct blocking.
+        """
+        pass
+
+    def distracted(self):
+        """Distracter detection."""
+
+        # up-sampling pre_M
+
+        # Compute confidence according to 
+        # S = with_in / with_out
+        conf_within = self.compute_conf(self.pre_M_resized, self.best_p_i_loc)
+        conf_all = np.sum(self.pre_M_resized)
+        distracter_score = conf_within / conf_all
+        print('The probability of been distracted is %s'%distracter_score)
+        if distracter_score > self.params['min_conf']:
+            return False
+        else:
+            return True
+            
+    @classmethod # Tested
+    def compute_conf(self, roi, roi_sum, loc_p):
+        """Helper func for computing confidence.
+        
+        Args:
+            roi: extracted roi.
+            loc_p: list, location params [cx, cy, w, h] in roi space
+        Returns:
+            conf: int, sum of values within/without the region specified by loc_p
+    
+        """
+        x,y,w,h = loc_p
+        conf = np.sum(roi[y-int(0.5*h): y+int(0.5*h), \
+                    x-int(0.5*w):x+int(0.5*w)])
+        conf = conf / (roi_sum - conf) # within/all ratio
+        return conf
+
+    @classmethod
+    def aff2loc(self, las_loc, aff_param, rz_factor):
+        """Convert affine params to location."""
+        assert len(aff_param)==4, 'This method only works for dof 4 aff space.'
+        # Space transformation, scalling and displacement
+        aff_param /= rz_factor 
+        cur_loc = [i+j for i,j in zip(las_loc, aff_param)]
+        return cur_loc
+
+        
 
 
 class TrackerVanilla(Tracker):
-	"""Vanilla tracker
+    """Vanilla tracker
 
-		The covariance matrix has only 4 degrees of freedom,
-		specified by vertical, horizontal translation of the central
-		point, variance of the width, variance of the w/h ratio.
+        The covariance matrix has only 4 degrees of freedom,
+        specified by vertical, horizontal translation of the central
+        point, variance of the width, variance of the w/h ratio.
 
-		The corrresponding actual senarios are object replacment,
-		object zoom in/out, object rotaion. Should be sufficient 
-		for most cases of car tracking.
+        The corrresponding actual senarios are object replacment,
+        object zoom in/out, object rotaion. Should be sufficient 
+        for most cases of car tracking.
 
-	"""
-	__doc__ = Tracker.__doc__ + __doc__
-	def __init__(self, init_location):
-		"""
-		Args:
-			init_location: list, [tlx, tly, w, h], target location
-				in the first frame.
-		"""
+    """
+    __doc__ = Tracker.__doc__ + __doc__
+    def __init__(self, init_location):
+        """
+        Args:
+            init_location: list, [tlx, tly, w, h], target location
+                in the first frame.
+        """
 
-		super(TrackerVanilla, self).__init__(init_location)
-		self._update_params()
+        super(TrackerVanilla, self).__init__(init_location)
+        self._update_params()
 
-	def _update_params(self):
-		"""Update aff_sig param."""
-		self.params['aff_sig'] = [10, 10, 0.05, 0.05]
-		self.params['particle_scales'] = np.arange(0.1, 5., 0.5)       
-
-
-	def _draw_particles(self, rz_factor):
-		"""
-		The covariance matrix has only 4 degrees of freedom,
-		specified by vertical, horizontal translation of the central
-		point, variance of the width, variance of the w/h ratio.
-
-		The corrresponding actual senarios are object replacment,
-		object zoom in/out, object rotaion. Should be sufficient 
-		for most cases of car tracking.
-
-		Args: 
-			rz_factor: float, factor of roi space and image space transformation.
-
-		"""
-		# Define degrees of freedom 
-		dof = len(self.params['aff_sig'])
-
-		# Define actual particles number
-		p_num = self.params['p_num'] * (1 + len(self.params['particle_scales']))
-
-		# Construct an p_num*6 size matrix with with each 
-		# column repersents one particle
-		# First onstruct a p_num*dof size normal distribution with 
-		# mean 0 and sigma 1
-		rand_norml_M = np.array([np.random.standard_normal(dof) for _ in range(p_num)])
-
-		# Then construct a affine sigma matrix
-		aff_sig_M = np.kron(np.ones((p_num, 1)), self.params['aff_sig'])
-
-		# Update particles 
-		aff_params_M = rand_norml_M * aff_sig_M
-
-		# Assign duplicate particles with different w/h `particle_scales`
-		idx = self.params['p_num']
-		for s in self.params['particle_scales']:
-			aff_params_M[idx: idx+idx, 2] *= s
-			aff_params_M[idx: idx+idx, 3] *= s
-			idx += idx
-
-		aff_params_M[:, 2] *= rz_factor
-		aff_params_M[:, 3] *= rz_factor
-		self.aff_params_M = aff_params_M
+    def _update_params(self):
+        """Update aff_sig param."""
+        self.params['aff_sig'] = [10, 10, 0.05, 0.05]
+        self.params['particle_scales'] = np.arange(0.1, 5., 0.5)       
 
 
+    def _draw_particles(self, rz_factor):
+        """
+        The covariance matrix has only 4 degrees of freedom,
+        specified by vertical, horizontal translation of the central
+        point, variance of the width, variance of the w/h ratio.
 
-	def predict_location(self, pre_M, gt_last, rz_factor, img, roi_size=224):
-		"""
-		Predict location for each particle. It is calculated by
-		1. compute the confidence of the i-th candidate, which is 
-			the summation of all the heatmap values within the candidate region
-			over values outside of the candidate region.
-		2. the candidate with the highest confidence value is predicted as target.
+        The corrresponding actual senarios are object replacment,
+        object zoom in/out, object rotaion. Should be sufficient 
+        for most cases of car tracking.
 
-		Args:
-			pre_M: (224,224) array, predicted heat map.
-			gt_last: [tlx, tly, w, h], location of the last frame.
-			rz_factor: >1 int, scalling factor, object's number of pixels 
-				in roi / pixels in img space.
-			img: image array.
-		Returns:
-			pre_location: list, [tlx, tly, w, h] the predicted location.
-		"""
-		# Draw particles by generating random affine paramters
-		self._draw_particles(rz_factor)
+        Args: 
+            rz_factor: float, factor of roi space and image space transformation.
 
-		# transform self.aff_params_M to location_M with each column 
-		# repersent [cx, cy, w, h] in the pre_M heat map
-		loc_M = np.zeros(self.aff_params_M.shape)
-		_, _, w, h = gt_last
-		cx, cy = roi_size // 2, roi_size // 2
-		loc_M[:, 0] = cx
-		loc_M[:, 1] = cy
-		loc_M[:, 2] = rz_factor * w 
-		loc_M[:, 3] = rz_factor * h
+        """
+        # Define degrees of freedom 
+        dof = len(self.params['aff_sig'])
 
-		loc_M += self.aff_params_M
-		loc_M = loc_M.astype(np.int)
+        # Define actual particles number
+        p_num = self.params['p_num'] * (1 + len(self.params['particle_scales']))
 
-		# Compute conf for each particle 
-		conf_lsit = []
-		pre_sum = pre_M.sum()
-		for p_i_loc in loc_M:
-			conf_i = self.compute_conf(pre_M, pre_sum, p_i_loc)
-			conf_lsit += [conf_i]
+        # Construct an p_num*6 size matrix with with each 
+        # column repersents one particle
+        # First onstruct a p_num*dof size normal distribution with 
+        # mean 0 and sigma 1
+        rand_norml_M = np.array([np.random.standard_normal(dof) for _ in range(p_num)])
 
-		# Get index and conf score of of the most confident one
-		idx = np.argmax(conf_lsit)
-		self.cur_best_conf = conf_lsit[idx]
+        # Then construct a affine sigma matrix
+        aff_sig_M = np.kron(np.ones((p_num, 1)), self.params['aff_sig'])
 
-		# Store values for computing distraction 
-		self.best_p_i_loc = loc_M[idx]
-		self.pre_M = pre_M
+        # Update particles 
+        aff_params_M = rand_norml_M * aff_sig_M
 
-		# Get the corresponding aff_param which is then
-		# used to predicted the cureent best location
-		best_aff =  self.aff_params_M[idx]
-		self.pre_location = self.aff2loc(gt_last, best_aff, rz_factor)
-		self.pre_location = [int(i) for i in self.pre_location]
+        # Assign duplicate particles with different w/h `particle_scales`
+        idx = self.params['p_num']
+        for s in self.params['particle_scales']:
+            aff_params_M[idx: idx+idx, 2] *= s
+            aff_params_M[idx: idx+idx, 3] *= s
+            idx += idx
 
-		# Stack into records queue
-		self.loc_q.put(self.pre_location)
-		self.conf_q.put(self.cur_best_conf)
-		self.img_q.put(img)
-
-		return self.pre_location
+        aff_params_M[:, 2] *= rz_factor
+        aff_params_M[:, 3] *= rz_factor
+        self.aff_params_M = aff_params_M
 
 
 
+    def predict_location(self, pre_M, gt_last, rz_factor, img, roi_size=224):
+        """
+        Predict location for each particle. It is calculated by
+        1. compute the confidence of the i-th candidate, which is 
+            the summation of all the heatmap values within the candidate region
+            over values outside of the candidate region.
+        2. the candidate with the highest confidence value is predicted as target.
 
+        Args:
+            pre_M: (224,224) array, predicted heat map.
+            gt_last: [tlx, tly, w, h], location of the last frame.
+            rz_factor: >1 int, scalling factor, object's number of pixels 
+                in roi / pixels in img space.
+            img: image array.
+        Returns:
+            pre_location: list, [tlx, tly, w, h] the predicted location.
+        """
+        # Draw particles by generating random affine paramters
+        self._draw_particles(rz_factor)
 
+        # transform self.aff_params_M to location_M with each column 
+        # repersent [cx, cy, w, h] in the pre_M heat map
+        loc_M = np.zeros(self.aff_params_M.shape)
+        _, _, w, h = gt_last
+        cx, cy = roi_size // 2, roi_size // 2
+        loc_M[:, 0] = cx
+        loc_M[:, 1] = cy
+        loc_M[:, 2] = rz_factor * w 
+        loc_M[:, 3] = rz_factor * h
 
+        loc_M += self.aff_params_M
+        loc_M = loc_M.astype(np.int)
 
+        # Compute conf for each particle 
+        conf_lsit = []
+        pre_sum = pre_M.sum()
+        for p_i_loc in loc_M:
+            conf_i = self.compute_conf(pre_M, pre_sum, p_i_loc)
+            conf_lsit += [conf_i]
 
+        # Get index and conf score of of the most confident one
+        idx = np.argmax(conf_lsit)
+        self.cur_best_conf = conf_lsit[idx]
 
+        # Store values for computing distraction 
+        self.best_p_i_loc = loc_M[idx]
+        self.pre_M = pre_M
 
-		
+        # Get the corresponding aff_param which is then
+        # used to predicted the cureent best location
+        best_aff =  self.aff_params_M[idx]
+        self.pre_location = self.aff2loc(gt_last, best_aff, rz_factor)
+        self.pre_location = [int(i) for i in self.pre_location]
 
+        # Stack into records queue
+        self.loc_q.put(self.pre_location)
+        self.conf_q.put(self.cur_best_conf)
+        self.img_q.put(img)
 
+        return self.pre_location

@@ -130,6 +130,18 @@ class SNet(SGNet):
         """
         super(SNet, self).__init__(scope, conv_tensor)
 
+
+
+    def fine_finetune(self,sess, pre_loc_roi):
+        """
+        Finetune with 
+            1. roi_0 and gt_M_0 in t=0
+            2. roi_t and gt_M_t in t=t
+        gt_M_t is an guassian mask located at pre_loc_roi 
+        """
+        pass
+
+
     # TODO, check contribution.
     def adaptive_finetune(self, sess, gt_M, fd_s_adp, lr=1e-6):
         """Finetune SNet with best pre_M predicetd by gNet.
