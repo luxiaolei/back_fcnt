@@ -103,25 +103,6 @@ class TrackerContour(object):
         self.step += 1
         return pre_loc_img
             
-    
-    def find_contour(self, img):
-        for level in np.arange(0.1, 1.5, 0.2):
-            print(level, 'level')
-            contours = measure.find_contours(img, level, fully_connected='high')
-            num_c = len(contours)
-            print('Number of contours: ', num_c)
-            if num_c >= 1:
-                target = contours[0]
-                print('x max x min, y max y min')
-                xmax, xmin, ymax, ymin = target[:, 0].max(), target[:, 0].min(), target[:, 1].max(), target[:, 1].min()
-                w = int((xmax - xmin) / 2)
-                h = int((ymax - ymin) / 2)
-                cx = int(xmin + w)
-                cy = int(ymin + h)
-                break
-        return cx, cy, 3*w, 3*h
-
-
         
 
 class Tracker:

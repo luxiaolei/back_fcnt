@@ -32,8 +32,10 @@ class SGNet:
         self.variables = []
         with tf.variable_scope(scope) as scope:
             self.input_maps = tf.placeholder(dtype=tf.float32, shape=(None,28,28, sel_num),name='input_maps')
-            self.pre_M = self._build_graph()
             self.gt_M = tf.placeholder(dtype=tf.float32, shape=(None,28,28),name='gt_M')
+            self.pre_M = self._build_graph()
+            self.loss = self._loss()
+            
 
 
     def _build_graph(self):
@@ -67,7 +69,7 @@ class SGNet:
             pre_M /= tf.reduce_max(pre_M)
         return pre_M
 
-    def loss(self):
+    def _loss(self):
         """Returns Losses for the current network.
         Returns:
             Loss: tf.Scalar tensor.

@@ -103,7 +103,7 @@ def train_SGNets(sess, img, gt, vgg, snet, gnet, inputProducer, idx_c4, idx_c5):
         inputProducer: InputProducer class instance.
     """
     gnet.params['wd'] = 0.5
-    gloss, sloss = gnet.loss(), snet.loss()
+    gloss, sloss = gnet.loss, snet.loss
     loss = gloss #+ 0.005*sloss
     tf.scalar_summary('loss', loss)
     writer = tf.train.SummaryWriter(TB_SUMMARY, sess.graph)
