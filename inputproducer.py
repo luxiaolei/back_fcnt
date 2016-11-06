@@ -78,8 +78,10 @@ class InputProducer:
 			gts_list = [[int(p) for p in i[:-1].split('\t')] 
 			                   for i in lines]
 		return gts_list
-
-	def extract_roi(self, img, gt):
+	
+	# TODO,@xl: COnsider in cases of gt is outof convas, (may be cap gt). 
+	# gt's w and h are less than a low critical number.
+	def extract_roi(self, img, gt, first_frame=False):
 		"""Extract ROI from img with target region centered.
 
 		Args:
@@ -92,6 +94,10 @@ class InputProducer:
 				original image space to roi space. 
 				>1 for enlarger, <1 for ensmaller.
 		"""
+		if first_frame:
+			self.first_img = img
+			self.first_gt = gt
+
 		roi_size  = self.roi_params['roi_size']
 		assert max(gt[2:]) <= roi_size
 
@@ -114,6 +120,7 @@ class InputProducer:
 		new_x = new_cx - gt[2] // 2
 		new_y = new_cx - gt[3] // 2
 	    
+		#roi = np.transpose(roi)
 		roi_resized = imresize(roi, (roi_size, roi_size))
 		resize_factor = roi_size / roi.shape[0]
 		return roi_resized, [new_x, new_y, gt[2], gt[3]], resize_factor
@@ -175,7 +182,8 @@ class InputProducer:
 
 		return convas
 
-	def gen_batches(self, img, gt, n_samples=5000, batch_sz=10, pos_ratio=0.7, scale_factors=None):
+	#TODO, @xl: add rotation samples
+	def gen_batches(self, img, gt, n_samples=5000, batch_sz=10, pos_ratio=0.7, scale_factors=None, random_brightness=True):
 		""" 
 		Returns batched trainning examples, with which's target location and 
 		width/height ratio are randomly distored.
@@ -206,6 +214,8 @@ class InputProducer:
 			self.roi_params['roi_scale'] = scale_factors[sf_idx]
 			roi, _, _ = self.extract_roi(img, gt)
 			gt_M = self.gen_mask((28,28)).astype(np.float32)
+			if random_brightness:
+				roi = roi*np.random.random()
 			samples += [roi]
 			targets += [gt_M]
 
@@ -265,26 +275,12 @@ class LiveInput(InputProducer):
 		'roi_scale': 3,
 		'l_off': [0,0]
 		}
+
 		#self.cap = cv2.VideoCapture(0)
 	
-	def save_fist_roi_mean(self, img, gt):
-		x,y,w,h = gt
-		roi_mean = img[y:y+h, x:x+w].mean()
-		self.roi_mean = roi_mean
-		self.first_gt = gt
-		self.first_img = img
-		
-	def Ajust_brighteness(self, img, gt_last):
-		img = img.astype(np.float)
-		x,y,w,h = gt_last
-		print(h, w, 'h, w in ajust brighteness!')
-		roi_cur_mean = img[y:y+h, x:x+w].mean()
-		print(img[y:y+h, x:x+w].shape, 'shape of arear!')
-		print(np.ones([h, w, 3]).shape, 'shape of ones!')
 
-		img[y:y+h, x:x+w] += np.ones([h, w, 3])*int(self.roi_mean-roi_cur_mean)
-		img[img>255] = 255
-		return img
+		
+
 			
 
 	

@@ -33,7 +33,9 @@ class Vgg16:
 
         # zero-mean input
         with tf.name_scope('preprocess') as scope:
-            mean = tf.constant([123.68, 116.779, 103.939], dtype=tf.float32, shape=[1, 1, 1, 3], name='img_mean') # RGB
+            #mean = tf.constant([123.68, 116.779, 103.939], dtype=tf.float32, shape=[1, 1, 1, 3], name='img_mean') # RGB
+            mean = tf.constant([103.939, 116.779, 123.68 ], dtype=tf.float32, shape=[1, 1, 1, 3], name='img_mean') # RGB
+            
             self.img_zero_mean = self.imgs-mean
 
         # conv1_1

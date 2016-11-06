@@ -4,7 +4,7 @@ import numpy as np
 
 from scipy.misc import imresize
 
-from utils import variable_on_cpu, variable_with_weight_decay
+from utils import gauss2d, gen_sel_maps
 
 
 
@@ -134,15 +134,50 @@ class SNet(SGNet):
 
 
 
-    def fine_finetune(self,sess, pre_loc_roi):
+    def fine_finetune(self,sess, tracker, roi, pre_loc_roi, vgg, idx_c4, idx_c5, last_fames_n=1):
         """
         Finetune with 
             1. roi_0 and gt_M_0 in t=0
             2. roi_t and gt_M_t in t=t
         gt_M_t is an guassian mask located at pre_loc_roi 
         """
-        pass
+        if tracker.step >11:
+            tracker.c4_maps_records = tracker.c4_maps_records[-last_fames_n:,...]
+            tracker.targets_records = tracker.targets_records[-last_fames_n:,...]
 
+        gauss = gauss2d((pre_loc_roi[3],pre_loc_roi[2]))
+        x,y,w,h = pre_loc_roi
+        gt_M_t = np.zeros(roi.shape[:2])
+        gt_M_t[y:y+h, x:x+w] = gauss#np.repeat(gauss[...,np.newaxis], 3, axis=-1)
+        gt_M_t = imresize(gt_M_t, (28,28))
+        gt_M_t= gt_M_t/gt_M_t.max()
+        c4_maps_t, _ = gen_sel_maps(sess, roi , vgg, idx_c4, idx_c5)
+
+        # Update records
+        tracker.targets_records = np.concatenate((tracker.targets_records, [gt_M_t]), axis=0)
+        tracker.c4_maps_records = np.concatenate((tracker.c4_maps_records, c4_maps_t), axis=0)
+
+        # Generates batches for current trainning.
+        c4_maps_records = np.concatenate((tracker.c4_maps_records, tracker.c4_maps_gt), axis=0)
+        targets_records = np.concatenate((tracker.targets_records, tracker.targets_gt),axis=0)
+        feed_dict_s = {self.input_maps: c4_maps_records, self.gt_M: targets_records}        
+
+        #optimizer = tf.train.GradientDescentOptimizer(0.020)
+        self.params['wd']=0.001
+        iter_nums = 10
+        lr = 0.19
+        
+
+        loss_ = sess.run(self.loss, feed_dict = feed_dict_s)
+        
+        iter_nums = int(loss_*10)
+        lr = loss_
+        optimizer = tf.train.GradientDescentOptimizer(lr)
+        train_op = optimizer.minimize(self.loss, var_list=self.variables)
+        for s in range(iter_nums):
+            _,prems, loss_ = sess.run([train_op, self.pre_M, self.loss], feed_dict = feed_dict_s)
+            print('SNet finetune in frame: %s  , step: %s,  Loss:  %.3f'%(tracker.step, \
+                                                                          s, loss_))
 
     # TODO, check contribution.
     def adaptive_finetune(self, sess, gt_M, fd_s_adp, lr=1e-6):

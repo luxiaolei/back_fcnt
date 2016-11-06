@@ -2,10 +2,11 @@
 import numpy as np
 import tensorflow as tf
 import skimage
+import cv2
 
 from skimage import draw
 from scipy.misc import imresize
-
+from scipy.linalg import norm
 
 
 
@@ -154,14 +155,53 @@ def gauss2d(shape=(6,6),sigma=1.):
     #h = h / h.max()
     return h
 
+def calcEntropy(img):
+    #hist,_ = np.histogram(img, np.arange(0, 256), normed=True)
+    hist = cv2.calcHist([img],[0],None,[256],[0,256])
+    hist = hist.ravel()/hist.sum()
+    #logs = np.nan_to_num(np.log2(hist))
+    logs = np.log2(hist+0.00001)
+    #hist_loghist = hist * logs
+    entropy = -1 * (hist*logs).sum()
+    return entropy
 
 
+def compare_images(img1, img2):
+    # calculate the difference and its norms
+    diff = img1 - img2  # elementwise for scipy arrays
+    m_norm = abs(diff).sum()  # Manhattan norm
+    z_norm = norm(diff.ravel(), 0)  # Zero norm
+    return (m_norm, z_norm)
 
-def IOU_eval(groud_truth_box, predicted_box):
+
+def IOU_eval(img, gt_cur, pre_loc):
     """
     Returns:
         iou: scaler
     """
+    convas = np.zeros(img.shape)
+    xg, yg, wg, hg = gt_cur
+    xp, yp, wp, hp = pre_loc
+    convas[yg:yg+hg, xg:xg+wg, :] += 1
+    convas[yp:yp+hp, xp:xp+wp, :] += 1
+    intersection = convas[convas==2].sum()/2
+    convas[convas>0] = 1
+    union = convas[convas>0].sum()
+    return intersection/union
 
-    pass
+def refPt_2_gt(refPt):
+    p1, p2 = refPt
+    x1, y1 = p1
+    x2, y2 = p2
+    w = x2 - x1
+    h = y2 - y1
+    return (x1, y1, w, h)
 
+def gen_sel_maps(sess, roi, vgg, idx_c4, idx_c5):
+    """Returns selected c4 and c5 maps"""
+    if len(roi.shape) == 3: roi = [roi]
+    fd = {vgg.imgs : roi}
+    c4_arr, c5_arr = sess.run([vgg.conv4_3_norm, vgg.conv5_3_norm], feed_dict=fd)
+    c4_maps = c4_arr[...,idx_c4]
+    c5_maps = c5_arr[...,idx_c5]
+    return c4_maps, c5_maps
