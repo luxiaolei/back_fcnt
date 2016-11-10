@@ -24,7 +24,7 @@ import time
 tf.app.flags.DEFINE_integer('iter_epoch_sg', 5,
                           """Number of epoches for trainning"""
                           """SGnet works""")
-tf.app.flags.DEFINE_integer('batch_size', 35,
+tf.app.flags.DEFINE_integer('batch_size', 15,
                           """Batch size for SGNet trainning"""
                           """SGnet works""")
 tf.app.flags.DEFINE_integer('n_samples_per_batch', 8000,
@@ -32,9 +32,9 @@ tf.app.flags.DEFINE_integer('n_samples_per_batch', 8000,
                           """SGnet works""")
 tf.app.flags.DEFINE_integer('sel_num', 354,
                           """Number of feature maps selected.""")
-tf.app.flags.DEFINE_string('use_net', 'g',
+tf.app.flags.DEFINE_string('use_net', 'sg',
 						"""true for train, false for eval""")
-tf.app.flags.DEFINE_string('model_name', 'first_LiveFaceXLHome',
+tf.app.flags.DEFINE_string('model_name', 'first_LiveFaceXLOfficesgmult3',
 						"""true for train, false for eval""")
 FLAGS = tf.app.flags.FLAGS
 
@@ -106,7 +106,7 @@ def train_SGNets(sess, img, gt, vgg, snet, gnet, inputProducer, idx_c4, idx_c5):
     # Backprop using SGD and updates vgg variables and sgnets variables
     global_step = tf.Variable(0, trainable=False)
     lr_exp = tf.train.exponential_decay(
-            0.25, # Initial learning rate 
+            0.15, # Initial learning rate 
             global_step, 
             1500, # Decay steps 
             0.8, # Decay rate 
@@ -125,8 +125,8 @@ def train_SGNets(sess, img, gt, vgg, snet, gnet, inputProducer, idx_c4, idx_c5):
     sample_batches, target_batches = inputProducer.gen_batches(img, gt,
                                     n_samples=FLAGS.n_samples_per_batch, 
                                     batch_sz=FLAGS.batch_size, 
-                                    pos_ratio=0.9, 
-                                    scale_factors=np.arange(1., 3., 0.2),
+                                    pos_ratio=1., 
+                                    scale_factors=np.arange(1., 2., 0.2),
                                     random_brightness=False) #np.array([1]))#
 
     print('Start training the SGNets........ for %s epoches'%FLAGS.iter_epoch_sg)
@@ -154,9 +154,9 @@ def train_SGNets(sess, img, gt, vgg, snet, gnet, inputProducer, idx_c4, idx_c5):
             pre_M_g, l, _, lr = sess.run([gnet.pre_M, loss, train_op, lr_exp], feed_dict=fd)
             
             loss_list += [l]
-            if l <= 0.1:
-                print('break learning!')
-                break
+            #if l <= 0.1:
+                #print('break learning!')
+                #break
             if step % 20 == 0: 
                 loss_ac = np.diff(np.diff(loss_list[-19:]))
                 loss_ac_summary = tf.scalar_summary('Loss acceleration', loss_ac.mean())
@@ -223,9 +223,20 @@ if os.path.exists(saved_ckpt):
     TrackReady = True
 else: 
     TrackReady = False
-    
+
+trackerTLD = cv2.Tracker_create("TLD")
+
+
 PosReady = False
 font = cv2.FONT_HERSHEY_SIMPLEX
+
+kalman = cv2.KalmanFilter(4, 2)
+
+kalman.measurementMatrix = np.array([[1,0,0,0],[0,1,0,0]],np.float32)
+kalman.transitionMatrix = np.array([[1,0,1,0],[0,1,0,1],[0,0,1,0],[0,0,0,1]],np.float32)
+kalman.processNoiseCov = np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]],np.float32) * 0.03
+
+#bgs = cv2.createBackgroundSubtractorMOG2(varThreshold=1.0)#history,nGauss,bgThresh,noise)
 while(cap.isOpened()):
     # Capture frame-by-frame
     ret, image = cap.read()
@@ -273,6 +284,8 @@ while(cap.isOpened()):
     # Records the first position
     if key == ord('s'):
         tracker.gt_last = refPt_2_gt(refPt)
+        ok = trackerTLD.init(image, tuple(tracker.gt_last))
+        w0_half, h0_half = np.array(tracker.gt_last[2:])/2
         print(tracker.gt_last, 'gt in start~!')
         PosReady = True
         
@@ -284,13 +297,14 @@ while(cap.isOpened()):
 
         t_s = time.time()
 
-        img = tracker.adjust_brightness(image)
+        img = image.copy()#img = tracker.adjust_brightness(image)
         
-        #img = inputProducer.Ajust_brighteness(img, gt_last)
-        roi, _, rz_factor = inputProducer.extract_roi(img, tracker.gt_last)
-
-        # @inputproducer, remove low level pixel
-        roi = tracker.preporcess_roi(roi)
+        try:
+            #img = inputProducer.Ajust_brighteness(img, gt_last)
+            roi, _, rz_factor = inputProducer.extract_roi(img, tracker.gt_last)
+            roi = tracker.preporcess_roi(roi)
+        except Exception:
+            pass
         
         ## Perform Target localiation predicted by GNet
         # Get heat map predicted by GNet
@@ -299,17 +313,66 @@ while(cap.isOpened()):
         pre_M_g, pre_M_s = sess.run([gnet.pre_M, snet.pre_M], feed_dict=fd)
 
         pre_M = tracker.preporcess_heatmaps(pre_M_g, pre_M_s, uses='g', resize=(224,224))
+        #pre_M = bgs.apply(pre_M)
+
         pre_loc, pre_loc_roi = tracker.predict_location(pre_M, rz_factor, threshold=np.arange(0.3, 0.9, 0.05))
         
         #Update SNet
-        #snet.fine_finetune(sess, tracker, roi, pre_loc_roi, vgg, idx_c4, idx_c5, last_fames_n=1)
+        if tracker.step % 2000 == 0:
+            snet.fine_finetune(sess, tracker, roi, pre_loc_roi, vgg, idx_c4, idx_c5, last_fames_n=1)
 
         # visualizing
         x,y,w,h = pre_loc
+        if w < w0_half: 
+            w = int(w0_half)
+            pre_loc = [w, y, w, h]
+        if h < h0_half: 
+            h = int(h0_half)
+            pre_loc = [w, y, w, h]
+        if (x+w) > image.shape[1]:
+            w =  image.shape[1] - x - 1
+        if (y+h) > image.shape[0]:
+            h =  image.shape[0] - y - 1
         xr, yr, wr, hr = pre_loc_roi
-        cv2.rectangle(image,(x,y),(x+w,y+h),(225,0,0),2)
+
+
+        _, pre_loc_tld= trackerTLD.update(image)#pre_loc
+        mp = np.array([[np.float32(pre_loc_tld[0])],[np.float32(pre_loc_tld[1])]])
+        kalman.correct(mp)
+        tp = kalman.predict()
+        pre_loc_tld= [tp[0], tp[1], pre_loc_tld[2], pre_loc_tld[3]]
+        
+        cur_velocity = [tp[2], tp[3]]
+        
+        
+        if tracker.step > 10 :
+            cur_speed = (cur_velocity[0]**2 + cur_velocity[1]**2)**0.5
+            last_speed = (tracker.velocity[0]**2 + tracker.velocity[1]**2)**0.5
+            if cur_speed <= 20.5* last_speed:
+                    
+                tracker.gt_last = pre_loc_tld
+
+                tracker.velocity = cur_velocity
+            else:
+                print('cur_speed', cur_speed)
+                print('last speed', last_speed)
+                #time.sleep(5)
+                pre_loc = tracker.gt_last
+        else:
+            tracker.velocity = cur_velocity
+        
+
+        #_, pre_loc_tld = trackerTLD.update(image)
+        #pre_loc_tld= pre_loc
+        p1_tld = (int(pre_loc_tld[0]), int(pre_loc_tld[1]))
+        p2_tld = (int(pre_loc_tld[0] + pre_loc_tld[2]), int(pre_loc_tld[1] + pre_loc_tld[3]))
+
+
+        cv2.rectangle(image,p1_tld, p2_tld,(225,0,0),2)
+
+        #cv2.rectangle(image,(x,y),(x+w,y+h),(225,0,0),2)
         cv2.rectangle(pre_M,(xr,yr),(xr+wr,yr+hr),(225,0,0),2)
-        cv2.putText(image, 'frames/sec : %.1f'%(60/(time.time()-t_s)) ,(5,20), font, 0.6,(255,0,0),1,cv2.LINE_AA)
+        cv2.putText(image, 'frames/sec : %.1f'%(60*(time.time()-t_s)) ,(5,20), font, 0.6,(255,0,0),1,cv2.LINE_AA)
         cv2.putText(pre_M, 'Conf Score : %.3f'%(tracker.conf_scores[-1]) ,(5,20), font, 0.6,(255,0,0),1,cv2.LINE_AA)
 
         cv2.imshow("pre_M_g", imresize(np.repeat(pre_M_g[...,np.newaxis], 3, axis=-1), (224,224)))
@@ -318,7 +381,7 @@ while(cap.isOpened()):
         cv2.imshow("ROI", roi)
         # Finetune SNet
         
-        print('Tracking done in step: %s'%tracker.step)
+        #print('Tracking done in step: %s'%tracker.step)
         
         
     cv2.imshow("image", image)

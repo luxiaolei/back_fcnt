@@ -134,14 +134,14 @@ class SNet(SGNet):
 
 
 
-    def fine_finetune(self,sess, tracker, roi, pre_loc_roi, vgg, idx_c4, idx_c5, last_fames_n=1):
+    def fine_finetune(self,sess, tracker, roi, pre_loc_roi, vgg, idx_c4, idx_c5, last_fames_n=1, lr_factor=0.001):
         """
         Finetune with 
             1. roi_0 and gt_M_0 in t=0
             2. roi_t and gt_M_t in t=t
         gt_M_t is an guassian mask located at pre_loc_roi 
         """
-        if tracker.step >11:
+        if tracker.step >30:
             tracker.c4_maps_records = tracker.c4_maps_records[-last_fames_n:,...]
             tracker.targets_records = tracker.targets_records[-last_fames_n:,...]
 
@@ -164,14 +164,12 @@ class SNet(SGNet):
 
         #optimizer = tf.train.GradientDescentOptimizer(0.020)
         self.params['wd']=0.001
-        iter_nums = 10
-        lr = 0.19
-        
+        iter_nums = 5
 
         loss_ = sess.run(self.loss, feed_dict = feed_dict_s)
         
-        iter_nums = int(loss_*10)
-        lr = loss_
+        iter_nums = int(2)
+        lr = loss_* lr_factor
         optimizer = tf.train.GradientDescentOptimizer(lr)
         train_op = optimizer.minimize(self.loss, var_list=self.variables)
         for s in range(iter_nums):

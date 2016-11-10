@@ -26,8 +26,9 @@ class TrackerContour(object):
         self.snet_t0_samples = snet_t0_samples
         self.gt_last = None
         self.pre_loc = None
+        self.velocity = [0,0]
 
-    def _compute_score(self, loc_list, arear_list, arear_punish = 1.):		
+    def _compute_score(self, loc_list, arear_list, arear_punish = 0.5):		
         """
         Computes score of each contour
 
@@ -80,7 +81,7 @@ class TrackerContour(object):
         x,y,w,h = self.gt_last
 
         target_t_mean = img[y:y+h, x:x+w].mean()
-        img[y:y+h, x:x+w] += np.ones([h, w, 3])*int(self.target_t0_mean-target_t_mean)
+        img[y:y+h, x:x+w,:] = img[y:y+h, x:x+w, :] + np.ones([h, w, 3])*int(self.target_t0_mean-target_t_mean)
         img[img>255] = 255
         return img
 
@@ -107,7 +108,8 @@ class TrackerContour(object):
         elif uses == 'sg' or uses == 'gs' and pre_M_g is not None and pre_M_s is not None:
             pre_M_g = imresize(pre_M_g, (224,224)).astype(np.float32)
             pre_M_s = imresize(pre_M_s, (224,224)).astype(np.float32)
-            pre_M = (pre_M_g+pre_M_s)/(pre_M_g+pre_M_s).max()
+            joint_distribut = pre_M_g*pre_M_s
+            pre_M = joint_distribut/joint_distribut.max()
             return pre_M
         else:
             print('Input argument %s is not valid.'%uses)

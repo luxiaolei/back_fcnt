@@ -3,11 +3,11 @@ Main script for FCNT tracker.
 """
 
 # Import custom class and functions
-from inputproducer import LiveInput
+from inputproducer import InputProducer
 from tracker import TrackerContour
 from vgg16 import Vgg16
 from sgnet import GNet, SNet
-from utils import select_fms, refPt_2_gt, gen_sel_maps
+from utils import select_fms, refPt_2_gt, gen_sel_maps, IOU_eval
 
 import cv2
 import numpy as np 
@@ -24,7 +24,7 @@ import time
 tf.app.flags.DEFINE_integer('iter_epoch_sg', 5,
                           """Number of epoches for trainning"""
                           """SGnet works""")
-tf.app.flags.DEFINE_integer('batch_size', 35,
+tf.app.flags.DEFINE_integer('batch_size', 15,
                           """Batch size for SGNet trainning"""
                           """SGnet works""")
 tf.app.flags.DEFINE_integer('n_samples_per_batch', 8000,
@@ -34,12 +34,12 @@ tf.app.flags.DEFINE_integer('sel_num', 354,
                           """Number of feature maps selected.""")
 tf.app.flags.DEFINE_string('use_net', 'g',
 						"""true for train, false for eval""")
-tf.app.flags.DEFINE_string('model_name', 'first_LiveFaceXLHome',
+tf.app.flags.DEFINE_string('model_name', 'first_Car1-large-train-Gonly2',
 						"""true for train, false for eval""")
 FLAGS = tf.app.flags.FLAGS
 
 ## Define varies pathes
-DATA_ROOT = 'data/Car1'
+DATA_ROOT = 'data/Suv'
 PRE_ROOT = os.path.join(DATA_ROOT, 'img_loc')
 IMG_PATH = os.path.join(DATA_ROOT, 'img')
 GT_PATH = os.path.join(DATA_ROOT, 'groundtruth_rect.txt')
@@ -132,8 +132,8 @@ def train_SGNets(sess, img, gt, vgg, snet, gnet, inputProducer, idx_c4, idx_c5):
     sample_batches, target_batches = inputProducer.gen_batches(img, gt,
                                     n_samples=FLAGS.n_samples_per_batch, 
                                     batch_sz=FLAGS.batch_size, 
-                                    pos_ratio=0.9, 
-                                    scale_factors=np.arange(1., 3., 0.2),
+                                    pos_ratio=1., 
+                                    scale_factors=np.arange(1., 2., 0.5),
                                     random_brightness=False) #np.array([1]))#
 
     print('Start training the SGNets........ for %s epoches'%FLAGS.iter_epoch_sg)
@@ -161,9 +161,9 @@ def train_SGNets(sess, img, gt, vgg, snet, gnet, inputProducer, idx_c4, idx_c5):
             pre_M_g, l, _, lr = sess.run([gnet.pre_M, loss, train_op, lr_exp], feed_dict=fd)
             
             loss_list += [l]
-            if l <= 0.1:
-                print('break learning!')
-                break
+            #if l <= 0.3:
+                #print('break learning!?')
+                #break
             if step % 20 == 0: 
                 loss_ac = np.diff(np.diff(loss_list[-19:]))
                 loss_ac_summary = tf.scalar_summary('Loss acceleration', loss_ac.mean())
@@ -194,8 +194,8 @@ t_start = time.time()
 ## Instantiate inputProducer and retrive the first img
 # with associated ground truth. 
 inputProducer = InputProducer(IMG_PATH, GT_PATH)
-img, gt, s  = next(inputProducer.gen_img)
-roi_t0, _, rz_factor = inputProducer.extract_roi(img, gt)
+image, gt, s  = next(inputProducer.gen_img)
+roi_t0, _, rz_factor = inputProducer.extract_roi(image, gt)
 
 tracker = TrackerContour()
 inputProducer.roi_params['roi_scale'] = 1.5
@@ -210,33 +210,43 @@ gt_M = inputProducer.gen_mask((28,28)) # rank2 array
 saver = tf.train.Saver()
 saved_ckpt = os.path.join('checkpoint', FLAGS.model_name.split('_')[-1]+'.ckpt')
 
-if os.path.exists(saved_ckpt):
-    print('Found saved model %s, restoring! '%saved_ckpt)
-    saver.restore(sess, saved_ckpt)
-else: 
-    print('Not found saved model %s. Trainning! '%saved_ckpt)
-    train_SGNets(sess, img, gt, vgg, snet, gnet, inputProducer, idx_c4, idx_c5)
-    saver.save(sess, saved_ckpt)
-    
-
-
 ## At t=0. Train S and G Nets 
 # Instainate SGNets with conv tensors and training.
 idx_c4 = select_fms(sess, vgg.conv4_3_norm, gt, rz_factor, fd, FLAGS.sel_num)
 idx_c5 = select_fms(sess, vgg.conv5_3_norm, gt, rz_factor, fd, FLAGS.sel_num)
 tracker.init_first_img(sess, image, roi_t0, vgg, idx_c4, idx_c5, gt_M, gt)
 
+
+if os.path.exists(saved_ckpt):
+    print('Found saved model %s, restoring! '%saved_ckpt)
+    saver.restore(sess, saved_ckpt)
+else: 
+    print('Not found saved model %s. Trainning! '%saved_ckpt)
+    train_SGNets(sess, image, gt, vgg, snet, gnet, inputProducer, idx_c4, idx_c5)
+    saver.save(sess, saved_ckpt)
+    
+
+trackerTLD = cv2.Tracker_create("TLD")
+ok = trackerTLD.init(image, tuple(gt))
+
+
+w0_half, h0_half = np.array(gt[2:])/2
 font = cv2.FONT_HERSHEY_SIMPLEX
 for i in range(len(inputProducer.imgs_path_list)-1):
+    
     t_s = time.time()
 
-    imgage, gt, s  = next(inputProducer.gen_img)
-    img = tracker.adjust_brightness(image)
-    #img = inputProducer.Ajust_brighteness(img, gt_last)
-    roi, _, rz_factor = inputProducer.extract_roi(img, tracker.gt_last)
-    # @inputproducer, remove low level pixel
-    roi = tracker.preporcess_roi(roi)
+    image, gt_cur, s  = next(inputProducer.gen_img)
+    img = image.copy()# tracker.adjust_brightness(image)
 
+    # @inputproducer, remove low level pixel
+    try:
+        #img = inputProducer.Ajust_brighteness(img, gt_last)
+        roi, _, rz_factor = inputProducer.extract_roi(img, tracker.gt_last)
+        roi = tracker.preporcess_roi(roi)
+    except Exception:
+        pass
+        
     ## Perform Target localiation predicted by GNet
     # Get heat map predicted by GNet
     c4_maps, c5_maps = gen_sel_maps(sess, roi, vgg, idx_c4, idx_c5)
@@ -247,19 +257,35 @@ for i in range(len(inputProducer.imgs_path_list)-1):
     pre_loc, pre_loc_roi = tracker.predict_location(pre_M ,rz_factor,threshold=np.arange(0.3, 0.9, 0.05))
     
     #Update SNet
-    snet.fine_finetune(sess, tracker, roi, pre_loc_roi, vgg, idx_c4, idx_c5, last_fames_n=1)
+    #snet.fine_finetune(sess, tracker, roi, pre_loc_roi, vgg, idx_c4, idx_c5, last_fames_n=1)
 
+
+    _, pre_loc_tld = trackerTLD.update(image)
+    tracker.gt_last = pre_loc_tld
+    p1_tld = (int(pre_loc_tld[0]), int(pre_loc_tld[1]))
+    p2_tld = (int(pre_loc_tld[0] + pre_loc_tld[2]), int(pre_loc_tld[1] + pre_loc_tld[3]))
     # visualizing
     x,y,w,h = pre_loc
+    if w < w0_half: 
+        w = int(w0_half)
+        pre_loc = [w, y, w, h]
+    if h < h0_half: 
+        h = int(h0_half)
+        pre_loc = [w, y, w, h]
+    if (x+w) > image.shape[1]:
+        w =  image.shape[1] - x - 1
+    if (y+h) > image.shape[0]:
+        h =  image.shape[0] - y - 1
     xr, yr, wr, hr = pre_loc_roi
+    #cv2.rectangle(image,p1_tld, p2_tld,(0,225,0),1)    
     cv2.rectangle(image,(x,y),(x+w,y+h),(225,0,0),2)
     cv2.rectangle(pre_M,(xr,yr),(xr+wr,yr+hr),(225,0,0),2)
     cv2.putText(image, 'Frame: %s IOU score: %.2f'%(i, IOU_eval(img, gt_cur, pre_loc)),(5,50), font, 0.6,(255,0,0),1,cv2.LINE_AA)
-    cv2.putText(image, 'frames/sec : %.1f'%(60/(time.time()-t_s)) ,(5,20), font, 0.6,(255,0,0),1,cv2.LINE_AA)
+    cv2.putText(image, 'frames/sec : %.1f'%(60*(time.time()-t_s)) ,(5,20), font, 0.6,(255,0,0),1,cv2.LINE_AA)
     cv2.putText(pre_M, 'Conf Score : %.3f'%(tracker.conf_scores[-1]) ,(5,20), font, 0.6,(255,0,0),1,cv2.LINE_AA)
 
-    cv2.imshow("pre_M_g", imresize(np.repeat(pre_M_g[...,np.newaxis], 3, axis=-1), (224,224)))
-    cv2.imshow("pre_M_s", imresize(np.repeat(pre_M_s[...,np.newaxis], 3, axis=-1), (224,224)))
+    #cv2.imshow("pre_M_g", imresize(np.repeat(pre_M_g[...,np.newaxis], 3, axis=-1), (224,224)))
+    #cv2.imshow("pre_M_s", imresize(np.repeat(pre_M_s[...,np.newaxis], 3, axis=-1), (224,224)))
     cv2.imshow("pre_M", np.repeat(pre_M[...,np.newaxis], 3, axis=-1))
     cv2.imshow("ROI", roi)
     # Finetune SNet
@@ -269,6 +295,14 @@ for i in range(len(inputProducer.imgs_path_list)-1):
         
     cv2.imshow("image", image)
     cv2.waitKey(1)
+
+    file_name = FLAGS.model_name + inputProducer.imgs_path_list[i-1].split('/')[-1]
+    file_name = os.path.join(PRE_ROOT, file_name)
+    plt.imsave(file_name, image)
+
+vid_path_prefix = os.path.join(PRE_ROOT, FLAGS.model_name) 
+os.system('ffmpeg -framerate 25 -i %s%%04d.jpg -c:v libx264 -profile:v high -crf 20 -pix_fmt yuv420p %s.mp4'\
+            %(vid_path_prefix, FLAGS.model_name))
 
 # close all open windows
 cv2.destroyAllWindows()
